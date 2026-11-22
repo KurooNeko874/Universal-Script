@@ -1,18 +1,25 @@
 --[[
     ============================================================
-    KurooEmote - Universal Roblox Marketplace Emote Wheel
-    Version     : 1.0.1
-    Author      : Kuroo
-    Description : Custom radial Emote Wheel (PC & Mobile) with
-                  automatic Roblox Marketplace emote fetching,
-                  live Marketplace keyword search, JSON local
-                  cache & favorites, adjustable animation speed
-                  (0.05x - 10x), and auto-stop on movement.
+    KurooEmote - Roda Emote Universal Marketplace Roblox
+    Versi       : 1.1.0
+    Pembuat     : Kuroo
+    Deskripsi   : UI Emote Wheel kustom (PC & Mobile) dengan:
+                  - 62.000+ Emote Marketplace Roblox otomatis
+                    lewat katalog JSON + AvatarEditorService
+                    bawaan Roblox + pencarian live Marketplace
+                  - Cache JSON lokal & daftar Favorit otomatis
+                    tersimpan di device masing-masing user
+                  - Tombol navigasi < dan > di kiri & kanan
+                    tombol Favorit agar mudah dipakai di HP
+                  - Ikon emote (☺) bisa di-drag / digeser bebas
+                    di layar agar nyaman bagi player Mobile & PC
+                  - Pengaturan kecepatan animasi (0.05x - 10x)
+                  - Berhenti otomatis saat karakter bergerak
     ============================================================
 ]]
 
 -- ============================================================
--- 1. SERVICES (Declared Once at Top)
+-- 1. DEKLARASI SERVICE ROBLOX (Cukup Sekali di Paling Atas)
 -- ============================================================
 local Players              = game:GetService("Players")
 local UserInputService     = game:GetService("UserInputService")
@@ -24,50 +31,60 @@ local AvatarEditorService  = game:GetService("AvatarEditorService")
 local CoreGui              = game:GetService("CoreGui")
 
 -- ============================================================
--- 2. CLEANUP PREVIOUS INSTANCE (Singleton)
+-- 2. PEMBERSIHAN INSTANCE LAMA (Agar Tidak Dobel Jika Dijalankan Ulang)
 -- ============================================================
-local env = (type(getgenv) == "function" and getgenv()) or _G
-if type(env.KurooEmoteCleanup) == "function" then
-    pcall(env.KurooEmoteCleanup)
+local lingkungan = (type(getgenv) == "function" and getgenv()) or _G
+if type(lingkungan.KurooEmoteCleanup) == "function" then
+    pcall(lingkungan.KurooEmoteCleanup)
 end
 
 -- ============================================================
--- 3. CONSTANTS & CONFIGURATION
+-- 3. KONSTANTA & PENGATURAN UTAMA
 -- ============================================================
-local VERSION          = "1.0.1"
-local FOLDER_NAME      = "KurooEmote"
-local FAV_FILE         = FOLDER_NAME .. "/favorites.json"
-local CACHE_FILE       = FOLDER_NAME .. "/emotes_cache.json"
-local CACHE_MAX_AGE    = 60 * 60 * 24 -- Refresh cache every 24 hours
-local MIN_VALID_CACHE  = 25           -- Ignore tiny/fallback-only caches
-local SLOTS_PER_PAGE   = 8
-local MIN_SPEED        = 0.05
-local MAX_SPEED        = 10
-local DEFAULT_SPEED    = 1
+local VERSI              = "1.1.0"
+local NAMA_FOLDER        = "KurooEmote"
+local FILE_FAVORIT       = NAMA_FOLDER .. "/favorites.json"
+local FILE_CACHE         = NAMA_FOLDER .. "/emotes_catalog_v2.json"
+local FILE_META_CACHE    = NAMA_FOLDER .. "/emotes_catalog_v2_meta.json"
+local UMUR_MAKS_CACHE    = 60 * 60 * 24 -- Perbarui cache katalog setiap 24 jam
+local MIN_CACHE_VALID    = 50           -- Abaikan cache jika isinya terlalu sedikit
+local SLOT_PER_HALAMAN   = 8            -- Jumlah slot dalam 1 lingkaran wheel
+local KECEPATAN_MIN      = 0.05         -- Batas kecepatan paling lambat
+local KECEPATAN_MAKS     = 10           -- Batas kecepatan paling cepat
+local KECEPATAN_DEFAULT  = 1            -- Kecepatan normal
 
-local COLORS = {
-    WheelBg        = Color3.fromRGB(36, 37, 42),
-    WheelStroke    = Color3.fromRGB(70, 72, 82),
-    CenterBg       = Color3.fromRGB(16, 17, 21),
-    CenterStroke   = Color3.fromRGB(58, 60, 70),
-    Divider        = Color3.fromRGB(220, 224, 235),
-    SlotIdle       = Color3.fromRGB(48, 50, 58),
-    SlotHover      = Color3.fromRGB(78, 84, 102),
-    SlotFavMode    = Color3.fromRGB(95, 80, 32),
-    SlotUnfavMode  = Color3.fromRGB(110, 42, 46),
-    PanelBg        = Color3.fromRGB(20, 21, 26),
-    PanelStroke    = Color3.fromRGB(62, 65, 78),
-    Accent         = Color3.fromRGB(0, 207, 255),
-    Gold           = Color3.fromRGB(255, 204, 51),
-    Danger         = Color3.fromRGB(245, 78, 86),
-    Success        = Color3.fromRGB(64, 214, 128),
-    TextPrimary    = Color3.fromRGB(245, 247, 252),
-    TextSecondary  = Color3.fromRGB(168, 174, 190),
-    TextMuted      = Color3.fromRGB(115, 120, 136),
+-- Daftar URL database JSON katalog emote Marketplace (62.000+ emote ter-update otomatis)
+local URL_JSON_EMOTE_REMOTE = {
+    "https://raw.githubusercontent.com/7yd7/sniper-Emote/refs/heads/test/EmoteSniper.json",
+    "https://raw.githubusercontent.com/7yd7/sniper-Emote/test/EmoteSniper.json",
 }
 
--- Fallback starter emotes (used only while first fetch runs or if offline)
-local FALLBACK_EMOTES = {
+-- Palet warna utama UI
+local WARNA = {
+    LatarWheel     = Color3.fromRGB(36, 37, 42),
+    GarisWheel     = Color3.fromRGB(70, 72, 82),
+    LatarTengah    = Color3.fromRGB(16, 17, 21),
+    GarisTengah    = Color3.fromRGB(58, 60, 70),
+    GarisPembagi   = Color3.fromRGB(220, 224, 235),
+    SlotNormal     = Color3.fromRGB(48, 50, 58),
+    SlotHover      = Color3.fromRGB(78, 84, 102),
+    SlotModeFav    = Color3.fromRGB(95, 80, 32),
+    SlotModeUnfav  = Color3.fromRGB(110, 42, 46),
+    LatarPanel     = Color3.fromRGB(20, 21, 26),
+    GarisPanel     = Color3.fromRGB(62, 65, 78),
+    TombolNav      = Color3.fromRGB(24, 26, 33),
+    TombolNavHover = Color3.fromRGB(44, 48, 60),
+    Aksen          = Color3.fromRGB(0, 207, 255),
+    Emas           = Color3.fromRGB(255, 204, 51),
+    Bahaya         = Color3.fromRGB(245, 78, 86),
+    Sukses         = Color3.fromRGB(64, 214, 128),
+    TeksUtama      = Color3.fromRGB(245, 247, 252),
+    TeksSekunder   = Color3.fromRGB(168, 174, 190),
+    TeksRedup      = Color3.fromRGB(115, 120, 136),
+}
+
+-- Emote cadangan awal (hanya muncul sesaat saat katalog sedang diunduh atau saat offline)
+local EMOTE_CADANGAN = {
     { id = 3360686498, name = "Stadium" },
     { id = 3360692915, name = "Tilt" },
     { id = 3576968026, name = "Shrug" },
@@ -87,40 +104,53 @@ local FALLBACK_EMOTES = {
 }
 
 -- ============================================================
--- 4. HELPER UTILITIES
+-- 4. FUNGSI BANTUAN UMUM
 -- ============================================================
-local LocalPlayer = Players.LocalPlayer
+local PemainLokal = Players.LocalPlayer
 
-local function getCamera()
+-- Selalu ambil kamera terbaru agar tidak error saat respawn / ganti kamera
+local function ambilKamera()
     return workspace.CurrentCamera
 end
 
-local function isMobileDevice()
+-- Deteksi apakah user memakai perangkat Mobile (HP/Tablet)
+local function apakahPerangkatMobile()
     return UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 end
 
-local function getThumbnailUrl(assetId)
+-- Buat URL gambar thumbnail resmi Roblox berdasarkan Asset ID emote
+local function buatUrlThumbnail(assetId)
     return "rbxthumb://type=Asset&id=" .. tostring(assetId) .. "&w=150&h=150"
 end
 
-local function clampSpeed(val)
-    local num = tonumber(val)
-    if not num or num ~= num then
-        return DEFAULT_SPEED
+-- Batasi angka kecepatan agar tetap berada di rentang 0.05 - 10
+local function batasiKecepatan(nilai)
+    local angka = tonumber(nilai)
+    if not angka or angka ~= angka then
+        return KECEPATAN_DEFAULT
     end
-    return math.clamp(num, MIN_SPEED, MAX_SPEED)
+    return math.clamp(angka, KECEPATAN_MIN, KECEPATAN_MAKS)
 end
 
-local function formatSpeed(val)
-    local rounded = math.floor(val * 100 + 0.5) / 100
-    return tostring(rounded)
+-- Rapikan tampilan angka kecepatan (maksimal 2 angka di belakang koma)
+local function formatKecepatan(nilai)
+    local dibulatkan = math.floor(nilai * 100 + 0.5) / 100
+    return tostring(dibulatkan)
 end
 
-local function getGuiParent()
+-- Format angka ribuan dengan titik (contoh: 62560 -> "62.560")
+local function formatAngka(n)
+    local teks = tostring(math.floor(tonumber(n) or 0))
+    local hasil = teks:reverse():gsub("(%d%d%d)", "%1."):reverse():gsub("^%.", "")
+    return hasil
+end
+
+-- Tentukan tempat aman untuk menaruh ScreenGui (gethui -> CoreGui -> PlayerGui)
+local function ambilIndukGui()
     if type(gethui) == "function" then
-        local ok, res = pcall(gethui)
-        if ok and res then
-            return res
+        local ok, hasil = pcall(gethui)
+        if ok and hasil then
+            return hasil
         end
     end
     local ok, _ = pcall(function()
@@ -129,49 +159,62 @@ local function getGuiParent()
     if ok then
         return CoreGui
     end
-    return LocalPlayer:WaitForChild("PlayerGui")
+    return PemainLokal:WaitForChild("PlayerGui")
 end
 
 -- ============================================================
--- 5. FILESYSTEM (JSON SAVE / LOAD)
+-- 5. PENYIMPANAN FILE LOKAL (BACA & TULIS JSON DI DEVICE USER)
 -- ============================================================
-local hasFS = (type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function")
+local punyaAksesFile = (type(writefile) == "function" and type(readfile) == "function" and type(isfile) == "function")
 
-local function ensureFolder()
-    if not hasFS then return end
+-- Pastikan folder "KurooEmote" sudah dibuat sebelum menulis file
+local function pastikanFolderAda()
+    if not punyaAksesFile then return end
     if type(isfolder) == "function" and type(makefolder) == "function" then
         pcall(function()
-            if not isfolder(FOLDER_NAME) then
-                makefolder(FOLDER_NAME)
+            if not isfolder(NAMA_FOLDER) then
+                makefolder(NAMA_FOLDER)
             end
         end)
     end
 end
 
-local function writeJsonFile(path, data)
-    if not hasFS then return false end
-    ensureFolder()
-    local ok, encoded = pcall(HttpService.JSONEncode, HttpService, data)
+local function tulisFileMentah(jalur, isi)
+    if not punyaAksesFile or type(isi) ~= "string" then return false end
+    pastikanFolderAda()
+    local ok = pcall(writefile, jalur, isi)
+    return ok
+end
+
+local function bacaFileMentah(jalur)
+    if not punyaAksesFile then return nil end
+    local okCek, ada = pcall(isfile, jalur)
+    if not okCek or not ada then return nil end
+    local okBaca, isi = pcall(readfile, jalur)
+    if not okBaca or type(isi) ~= "string" or isi == "" then return nil end
+    return isi
+end
+
+local function tulisFileJson(jalur, data)
+    if not punyaAksesFile then return false end
+    pastikanFolderAda()
+    local ok, jsonTeks = pcall(HttpService.JSONEncode, HttpService, data)
     if not ok then return false end
-    local writeOk = pcall(writefile, path, encoded)
-    return writeOk
+    return tulisFileMentah(jalur, jsonTeks)
 end
 
-local function readJsonFile(path)
-    if not hasFS then return nil end
-    local existsOk, exists = pcall(isfile, path)
-    if not existsOk or not exists then return nil end
-    local readOk, raw = pcall(readfile, path)
-    if not readOk or type(raw) ~= "string" or raw == "" then return nil end
-    local decOk, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
-    if not decOk then return nil end
-    return decoded
+local function bacaFileJson(jalur)
+    local mentah = bacaFileMentah(jalur)
+    if not mentah then return nil end
+    local ok, hasil = pcall(HttpService.JSONDecode, HttpService, mentah)
+    if not ok then return nil end
+    return hasil
 end
 
 -- ============================================================
--- 6. HTTP REQUEST WRAPPER (MULTI-METHOD + VALIDATION)
+-- 6. PENGAMBILAN DATA HTTP (MULTI-METODE & VALIDASI JSON)
 -- ============================================================
-local function getRequestFunc()
+local function ambilFungsiRequest()
     if type(request) == "function" then return request end
     if type(http_request) == "function" then return http_request end
     if type(syn) == "table" and type(syn.request) == "function" then return syn.request end
@@ -180,280 +223,404 @@ local function getRequestFunc()
     return nil
 end
 
-local function decodeCatalogJson(raw)
-    if type(raw) ~= "string" or #raw < 2 then return nil end
-    local decOk, data = pcall(HttpService.JSONDecode, HttpService, raw)
-    if decOk and type(data) == "table" and type(data.data) == "table" then
-        return data
+-- Ambil isi teks mentah dari URL (pakai game:HttpGet lalu fallback ke request)
+local function ambilTeksHttp(url)
+    local ok, res = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if ok and type(res) == "string" and #res > 20 then
+        return res, 200
     end
-    return nil
+
+    local fnReq = ambilFungsiRequest()
+    if fnReq then
+        local reqOk, resp = pcall(fnReq, {
+            Url = url,
+            Method = "GET",
+            Headers = {
+                ["Accept"] = "application/json, text/plain, */*",
+                ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            },
+        })
+        if reqOk and type(resp) == "table" and type(resp.Body) == "string" and #resp.Body > 20 then
+            return resp.Body, tonumber(resp.StatusCode) or 200
+        end
+    end
+
+    return nil, nil
 end
 
-local function httpGetCatalogJson(url)
-    local reqFn = getRequestFunc()
-    local statusCode = nil
+-- Ubah string JSON katalog menjadi tabel daftar emote + cursor halaman berikutnya
+local function uraiJsonKatalog(mentah)
+    if type(mentah) ~= "string" or #mentah < 2 then return nil, nil end
+    local ok, data = pcall(HttpService.JSONDecode, HttpService, mentah)
+    if ok and type(data) == "table" then
+        if type(data.data) == "table" then
+            return data.data, data.nextPageCursor
+        elseif #data > 0 and type(data[1]) == "table" then
+            return data, nil
+        end
+    end
+    return nil, nil
+end
 
-    -- Method 1: Executor request() (works reliably on Roblox domains & proxies)
-    if reqFn then
-        local reqOk, resp = pcall(reqFn, {
+-- Ambil data katalog via HTTP API (request executor terlebih dahulu, lalu HttpGet)
+local function ambilDataKatalogHttp(url)
+    local fnReq = ambilFungsiRequest()
+    local kodeStatus = nil
+
+    if fnReq then
+        local reqOk, resp = pcall(fnReq, {
             Url = url,
             Method = "GET",
             Headers = {
                 ["Accept"] = "application/json",
-                ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Roblox/WinInet",
+                ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
             },
         })
         if reqOk and type(resp) == "table" then
-            statusCode = tonumber(resp.StatusCode)
-            if type(resp.Body) == "string" then
-                local parsed = decodeCatalogJson(resp.Body)
-                if parsed then
-                    return parsed, statusCode
-                end
+            kodeStatus = tonumber(resp.StatusCode)
+            local daftar, cursor = uraiJsonKatalog(resp.Body)
+            if daftar then
+                return daftar, cursor, kodeStatus
             end
         end
     end
 
-    -- Method 2: game:HttpGet fallback
     local ok, res = pcall(function()
         return game:HttpGet(url)
     end)
     if ok and type(res) == "string" then
-        local parsed = decodeCatalogJson(res)
-        if parsed then
-            return parsed, 200
+        local daftar, cursor = uraiJsonKatalog(res)
+        if daftar then
+            return daftar, cursor, 200
         end
     end
 
-    return nil, statusCode
+    return nil, nil, kodeStatus
 end
 
 -- ============================================================
--- 7. STATE MANAGEMENT
+-- 7. MANAJEMEN DATA & STATUS (STATE)
 -- ============================================================
-local State = {
-    IsOpen            = false,
-    IsDestroyed       = false,
-    ViewMode          = "All",      -- "All" or "Favorites"
-    StarMode          = false,      -- true = Add Fav (in All) / Remove Fav (in Favorites)
-    Speed             = DEFAULT_SPEED,
-    SearchQuery       = "",
-    CurrentPage       = 1,
-    TotalPages        = 1,
+local Status = {
+    Terbuka             = false,
+    SudahDihancurkan    = false,
+    ModeTampilan        = "Semua",   -- "Semua" atau "Favorit"
+    ModeBintang         = false,     -- true = Tambah Fav (di Semua) / Hapus Fav (di Favorit)
+    Kecepatan           = KECEPATAN_DEFAULT,
+    KataKunciCari       = "",
+    HalamanSekarang     = 1,
+    TotalHalaman        = 1,
 
-    AllEmotes         = {},         -- Array of { id = number, name = string }
-    AllEmoteSet       = {},         -- [id] = true
-    Favorites         = {},         -- Array of { id = number, name = string }
-    FavoriteSet       = {},         -- [id] = true
-    FilteredList      = {},         -- Current filtered list displayed on wheel
-    LiveSearchResults = {},         -- Live Roblox Marketplace keyword search results
-    LiveSearchQuery   = "",         -- Normalized query matching LiveSearchResults
-    IdLookupCache     = {},         -- [id] = name
-    AnimIdCache       = {},         -- [assetId] = animationId (string)
+    SemuaEmote          = {},        -- Daftar { id = angka, name = string, l = hurufKecil }
+    SetSemuaEmote       = {},        -- Indeks cepat [id] = true agar tidak duplikat
+    DaftarFavorit       = {},        -- Daftar emote favorit user
+    SetFavorit          = {},        -- Indeks cepat [id] = true untuk cek status favorit
+    DaftarTampil        = {},        -- Daftar emote yang sedang ditampilkan di wheel
+    HasilCariLive       = {},        -- Hasil pencarian langsung dari Marketplace
+    KataKunciLive       = "",        -- Kata kunci yang cocok dengan HasilCariLive
+    CacheNamaId         = {},        -- Cache nama emote hasil pencarian berdasarkan ID
+    CacheAnimId         = {},        -- Cache konversi AssetId -> AnimationId
 
-    IsFetchingCatalog = false,
-    SearchRequestId   = 0,
+    SedangMuatKatalog   = false,
+    MasihPakaiCadangan  = true,
+    IdDebounceCari      = 0,
+    IdPermintaanCari    = 0,
 
-    CurrentTrack      = nil,
-    ActiveEmoteId     = nil,
-    Connections       = {},
-    CharConnections   = {},
+    PosisiIkonKustom    = false,     -- Menjadi true jika user menggeser (drag) ikon senyum
+
+    TrackAktif          = nil,       -- AnimationTrack emote yang sedang diputar
+    IdEmoteAktif        = nil,
+    DaftarKoneksi       = {},        -- Semua koneksi event global (untuk dibersihkan nanti)
+    KoneksiKarakter     = {},        -- Koneksi event khusus karakter saat ini
 }
 
-local function trackConn(conn)
-    if conn then
-        table.insert(State.Connections, conn)
+-- Simpan koneksi event agar mudah di-Disconnect saat script dimatikan/dijalankan ulang
+local function catatKoneksi(koneksi)
+    if koneksi then
+        table.insert(Status.DaftarKoneksi, koneksi)
     end
-    return conn
+    return koneksi
 end
 
-local function clearCharConns()
-    for _, conn in ipairs(State.CharConnections) do
-        pcall(function() conn:Disconnect() end)
+local function bersihkanKoneksiKarakter()
+    for _, koneksi in ipairs(Status.KoneksiKarakter) do
+        pcall(function() koneksi:Disconnect() end)
     end
-    table.clear(State.CharConnections)
+    table.clear(Status.KoneksiKarakter)
 end
 
--- Load Favorites from local JSON
-local function loadFavorites()
-    local data = readJsonFile(FAV_FILE)
-    State.Favorites = {}
-    State.FavoriteSet = {}
+-- Muat daftar Favorit dari file JSON lokal
+local function muatFavorit()
+    local data = bacaFileJson(FILE_FAVORIT)
+    Status.DaftarFavorit = {}
+    Status.SetFavorit = {}
     if type(data) == "table" then
         for _, item in ipairs(data) do
             local id = tonumber(item.id)
-            local name = tostring(item.name or ("Emote #" .. tostring(id)))
-            if id and not State.FavoriteSet[id] then
-                State.FavoriteSet[id] = true
-                table.insert(State.Favorites, { id = id, name = name })
+            local nama = tostring(item.name or ("Emote #" .. tostring(id)))
+            if id and not Status.SetFavorit[id] then
+                Status.SetFavorit[id] = true
+                table.insert(Status.DaftarFavorit, {
+                    id   = id,
+                    name = nama,
+                    l    = string.lower(nama),
+                })
             end
         end
     end
 end
 
-local function saveFavorites()
-    writeJsonFile(FAV_FILE, State.Favorites)
+-- Simpan daftar Favorit ke file JSON lokal
+local function simpanFavorit()
+    local ringkas = {}
+    for _, item in ipairs(Status.DaftarFavorit) do
+        table.insert(ringkas, { id = item.id, name = item.name })
+    end
+    tulisFileJson(FILE_FAVORIT, ringkas)
 end
 
-local function addEmoteToAll(id, name)
+-- Tambahkan 1 emote ke daftar utama jika belum ada
+local function tambahEmoteKeDaftar(id, nama)
     id = tonumber(id)
-    if not id or State.AllEmoteSet[id] then return false end
-    State.AllEmoteSet[id] = true
-    table.insert(State.AllEmotes, {
+    if not id or Status.SetSemuaEmote[id] then return false end
+    local namaBersih = tostring(nama or ("Emote #" .. tostring(id)))
+    Status.SetSemuaEmote[id] = true
+    table.insert(Status.SemuaEmote, {
         id   = id,
-        name = tostring(name or ("Emote #" .. tostring(id))),
+        name = namaBersih,
+        l    = string.lower(namaBersih),
     })
     return true
 end
 
-local function loadEmotesCache()
-    local data = readJsonFile(CACHE_FILE)
-    if type(data) == "table" and type(data.emotes) == "table" and #data.emotes >= MIN_VALID_CACHE then
-        for _, item in ipairs(data.emotes) do
-            addEmoteToAll(item.id, item.name)
-        end
-        local updatedAt = tonumber(data.updatedAt) or 0
-        local isFresh = (os.time() - updatedAt) < CACHE_MAX_AGE
-        return true, isFresh
+-- Masukkan ribuan emote sekaligus secara bertahap (chunking) agar game tidak lag/freeze
+local function masukkanArrayEmote(daftarItem, gantiCadangan)
+    if type(daftarItem) ~= "table" or #daftarItem == 0 then return 0 end
+
+    if gantiCadangan and Status.MasihPakaiCadangan then
+        Status.SemuaEmote = {}
+        Status.SetSemuaEmote = {}
+        Status.MasihPakaiCadangan = false
     end
-    return false, false
+
+    local jumlahBaru = 0
+    for idx = 1, #daftarItem do
+        if Status.SudahDihancurkan then break end
+        local item = daftarItem[idx]
+        if type(item) == "table" then
+            local id = tonumber(item.id or item.Id)
+            local nama = item.name or item.Name
+            if id and not Status.SetSemuaEmote[id] then
+                local namaBersih = tostring(nama or ("Emote #" .. tostring(id)))
+                Status.SetSemuaEmote[id] = true
+                Status.SemuaEmote[#Status.SemuaEmote + 1] = {
+                    id   = id,
+                    name = namaBersih,
+                    l    = string.lower(namaBersih),
+                }
+                jumlahBaru = jumlahBaru + 1
+            end
+        end
+        -- Beri jeda 1 frame setiap 6.000 item agar FPS tetap mulus di HP
+        if idx % 6000 == 0 then
+            task.wait()
+        end
+    end
+    return jumlahBaru
 end
 
-local function saveEmotesCache()
-    if #State.AllEmotes < MIN_VALID_CACHE then return end
-    writeJsonFile(CACHE_FILE, {
-        version   = VERSION,
+-- Muat katalog emote dari cache JSON lokal jika tersedia
+local function muatCacheEmote()
+    local mentah = bacaFileMentah(FILE_CACHE)
+    if not mentah then return false, false end
+
+    local daftar = uraiJsonKatalog(mentah)
+    if not daftar or #daftar < MIN_CACHE_VALID then
+        return false, false
+    end
+
+    masukkanArrayEmote(daftar, true)
+
+    local meta = bacaFileJson(FILE_META_CACHE)
+    local waktuUpdate = (type(meta) == "table" and tonumber(meta.updatedAt)) or 0
+    local masihSegar = (os.time() - waktuUpdate) < UMUR_MAKS_CACHE
+    return (#Status.SemuaEmote >= MIN_CACHE_VALID), masihSegar
+end
+
+-- Simpan JSON mentah hasil unduhan langsung ke file cache lokal
+local function simpanCacheMentah(jsonMentah)
+    if type(jsonMentah) ~= "string" or #jsonMentah < 500 then return end
+    tulisFileMentah(FILE_CACHE, jsonMentah)
+    tulisFileJson(FILE_META_CACHE, {
+        version   = VERSI,
         updatedAt = os.time(),
-        emotes    = State.AllEmotes,
+        count     = #Status.SemuaEmote,
+    })
+end
+
+-- Simpan tabel katalog emote ke file cache lokal
+local function simpanCacheTabel()
+    if #Status.SemuaEmote < MIN_CACHE_VALID then return end
+    local ringkas = {}
+    for idx = 1, #Status.SemuaEmote do
+        local item = Status.SemuaEmote[idx]
+        ringkas[idx] = { id = item.id, name = item.name }
+    end
+    tulisFileJson(FILE_CACHE, { data = ringkas })
+    tulisFileJson(FILE_META_CACHE, {
+        version   = VERSI,
+        updatedAt = os.time(),
+        count     = #Status.SemuaEmote,
     })
 end
 
 -- ============================================================
--- 8. DISABLE DEFAULT ROBLOX EMOTE WHEEL
+-- 8. MATIKAN EMOTE WHEEL BAWAAN ROBLOX
 -- ============================================================
-local function disableDefaultEmotes()
+local function matikanEmoteBawaan()
     pcall(function()
         StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.EmotesMenu, false)
     end)
 end
 
-disableDefaultEmotes()
+matikanEmoteBawaan()
 
 -- ============================================================
--- 9. ANIMATION PLAYBACK ENGINE (AUTO-STOP ON MOVEMENT)
+-- 9. MESIN PEMUTAR ANIMASI EMOTE (BERHENTI OTOMATIS SAAT GERAK)
 -- ============================================================
-local showToast -- Forward declaration
+local tampilkanNotif -- Deklarasi awal agar bisa dipanggil sebelum didefinisikan
 
-local function stopCurrentEmote(fadeTime)
-    if State.CurrentTrack then
+local function hentikanEmoteAktif(waktuFade)
+    if Status.TrackAktif then
         pcall(function()
-            State.CurrentTrack:Stop(fadeTime or 0.15)
+            Status.TrackAktif:Stop(waktuFade or 0.15)
         end)
-        State.CurrentTrack = nil
-        State.ActiveEmoteId = nil
+        Status.TrackAktif = nil
+        Status.IdEmoteAktif = nil
     end
 end
 
-local function bindCharacterMovementStop(character)
-    clearCharConns()
-    if not character then return end
+-- Pantau pergerakan karakter agar emote otomatis berhenti seperti bawaan Roblox
+local function pasangDeteksiGerakKarakter(karakter)
+    bersihkanKoneksiKarakter()
+    if not karakter then return end
 
-    local humanoid = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid", 5)
+    local humanoid = karakter:FindFirstChildOfClass("Humanoid") or karakter:WaitForChild("Humanoid", 5)
     if not humanoid then return end
 
-    table.insert(State.CharConnections, humanoid:GetPropertyChangedSignal("MoveDirection"):Connect(function()
-        if State.CurrentTrack and humanoid.MoveDirection.Magnitude > 0.05 then
-            stopCurrentEmote(0.15)
+    -- Berhenti saat mulai berjalan / menggerakkan analog atau WASD
+    table.insert(Status.KoneksiKarakter, humanoid:GetPropertyChangedSignal("MoveDirection"):Connect(function()
+        if Status.TrackAktif and humanoid.MoveDirection.Magnitude > 0.05 then
+            hentikanEmoteAktif(0.15)
         end
     end))
 
-    table.insert(State.CharConnections, humanoid.Jumping:Connect(function(active)
-        if active and State.CurrentTrack then
-            stopCurrentEmote(0.1)
+    -- Berhenti saat melompat
+    table.insert(Status.KoneksiKarakter, humanoid.Jumping:Connect(function(aktif)
+        if aktif and Status.TrackAktif then
+            hentikanEmoteAktif(0.1)
         end
     end))
 
-    table.insert(State.CharConnections, humanoid.StateChanged:Connect(function(_, newState)
-        if not State.CurrentTrack then return end
-        if newState == Enum.HumanoidStateType.Climbing
-            or newState == Enum.HumanoidStateType.Swimming
-            or newState == Enum.HumanoidStateType.Seated
-            or newState == Enum.HumanoidStateType.FallingDown
-            or newState == Enum.HumanoidStateType.Ragdoll
-            or newState == Enum.HumanoidStateType.Dead
-            or newState == Enum.HumanoidStateType.Freefall
+    -- Berhenti saat memanjat, berenang, duduk, jatuh, ragdoll, atau mati
+    table.insert(Status.KoneksiKarakter, humanoid.StateChanged:Connect(function(_, statusBaru)
+        if not Status.TrackAktif then return end
+        if statusBaru == Enum.HumanoidStateType.Climbing
+            or statusBaru == Enum.HumanoidStateType.Swimming
+            or statusBaru == Enum.HumanoidStateType.Seated
+            or statusBaru == Enum.HumanoidStateType.FallingDown
+            or statusBaru == Enum.HumanoidStateType.Ragdoll
+            or statusBaru == Enum.HumanoidStateType.Dead
+            or statusBaru == Enum.HumanoidStateType.Freefall
         then
-            stopCurrentEmote(0.15)
+            hentikanEmoteAktif(0.15)
         end
     end))
 
-    table.insert(State.CharConnections, humanoid.Died:Connect(function()
-        stopCurrentEmote(0)
+    table.insert(Status.KoneksiKarakter, humanoid.Died:Connect(function()
+        hentikanEmoteAktif(0)
     end))
 end
 
-if LocalPlayer.Character then
-    bindCharacterMovementStop(LocalPlayer.Character)
+if PemainLokal.Character then
+    pasangDeteksiGerakKarakter(PemainLokal.Character)
 end
-trackConn(LocalPlayer.CharacterAdded:Connect(function(char)
-    stopCurrentEmote(0)
-    bindCharacterMovementStop(char)
+catatKoneksi(PemainLokal.CharacterAdded:Connect(function(karakterBaru)
+    hentikanEmoteAktif(0)
+    pasangDeteksiGerakKarakter(karakterBaru)
 end))
 
-local function resolveAnimationId(assetId)
+-- Ambil AnimationId dari Asset Emote Marketplace menggunakan game:GetObjects
+local function ambilAnimationId(assetId)
     assetId = tonumber(assetId)
     if not assetId then return nil end
 
-    if State.AnimIdCache[assetId] then
-        return State.AnimIdCache[assetId]
+    if Status.CacheAnimId[assetId] then
+        return Status.CacheAnimId[assetId]
     end
 
-    -- Method 1: Load asset via game:GetObjects (works for all public Marketplace emotes in standalone)
-    local ok, objs = pcall(function()
+    local ok, daftarObjek = pcall(function()
         return game:GetObjects("rbxassetid://" .. tostring(assetId))
     end)
 
-    if ok and type(objs) == "table" and #objs > 0 then
-        local foundAnimId = nil
-        for _, obj in ipairs(objs) do
+    if ok and type(daftarObjek) == "table" and #daftarObjek > 0 then
+        local animIdKetemu = nil
+        for _, obj in ipairs(daftarObjek) do
             if obj:IsA("Animation") and obj.AnimationId ~= "" then
-                foundAnimId = obj.AnimationId
+                animIdKetemu = obj.AnimationId
             else
                 local anim = obj:FindFirstChildWhichIsA("Animation", true)
                 if anim and anim.AnimationId ~= "" then
-                    foundAnimId = anim.AnimationId
+                    animIdKetemu = anim.AnimationId
                 end
             end
             pcall(function() obj:Destroy() end)
-            if foundAnimId then break end
+            if animIdKetemu then break end
         end
-        if foundAnimId then
-            State.AnimIdCache[assetId] = foundAnimId
-            return foundAnimId
+        if animIdKetemu then
+            Status.CacheAnimId[assetId] = animIdKetemu
+            return animIdKetemu
         end
     end
 
-    -- Method 2: Fallback if user entered a raw AnimationId directly
-    return "rbxassetid://" .. tostring(assetId)
+    return nil
 end
 
-local function playEmote(emoteItem)
-    if not emoteItem or not emoteItem.id then return end
+-- Atur kecepatan dan pantau saat track animasi selesai
+local function ikatSiklusTrack(track, idEmote)
+    Status.TrackAktif = track
+    Status.IdEmoteAktif = idEmote
+    pcall(function()
+        track:AdjustSpeed(Status.Kecepatan)
+    end)
+    track.Stopped:Connect(function()
+        if Status.TrackAktif == track then
+            Status.TrackAktif = nil
+            Status.IdEmoteAktif = nil
+        end
+    end)
+end
 
-    local character = LocalPlayer.Character
-    if not character then
-        showToast("Karakter belum siap!", COLORS.Danger)
+-- Putar emote dengan 3 tahap cadangan agar kompatibel dengan semua Emote Official, UGC, & AnimationId
+local function putarEmote(itemEmote)
+    if not itemEmote or not itemEmote.id then return end
+
+    local karakter = PemainLokal.Character
+    if not karakter then
+        tampilkanNotif("Karakter belum siap!", WARNA.Bahaya)
         return
     end
 
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local humanoid = karakter:FindFirstChildOfClass("Humanoid")
     if not humanoid or humanoid.Health <= 0 then
-        showToast("Tidak bisa emote saat ini.", COLORS.Danger)
+        tampilkanNotif("Tidak bisa melakukan emote saat ini.", WARNA.Bahaya)
         return
     end
 
     if humanoid.RigType == Enum.HumanoidRigType.R6 then
-        showToast("Avatar R6 terdeteksi — Emote Marketplace membutuhkan R15.", COLORS.Gold)
+        tampilkanNotif("Avatar R6 terdeteksi — Emote Marketplace membutuhkan R15.", WARNA.Emas)
     end
 
     local animator = humanoid:FindFirstChildOfClass("Animator")
@@ -462,114 +629,130 @@ local function playEmote(emoteItem)
         animator.Parent = humanoid
     end
 
-    stopCurrentEmote(0.1)
+    hentikanEmoteAktif(0.1)
 
     task.spawn(function()
-        local animId = resolveAnimationId(emoteItem.id)
-        if not animId or State.IsDestroyed then
-            showToast("Gagal memuat animasi emote.", COLORS.Danger)
+        local karSaatIni = PemainLokal.Character
+        local humSaatIni = karSaatIni and karSaatIni:FindFirstChildOfClass("Humanoid")
+        local animSaatIni = humSaatIni and humSaatIni:FindFirstChildOfClass("Animator")
+        if not humSaatIni or humSaatIni.Health <= 0 or not animSaatIni or Status.SudahDihancurkan then return end
+
+        -- Tahap 1: Ekstrak AnimationId dari asset via game:GetObjects lalu jalankan lewat Animator
+        local animId = ambilAnimationId(itemEmote.id)
+        if animId then
+            local animObj = Instance.new("Animation")
+            animObj.AnimationId = animId
+            local okMuat, track = pcall(function()
+                return animSaatIni:LoadAnimation(animObj)
+            end)
+            animObj:Destroy()
+
+            if okMuat and track then
+                track.Priority = Enum.AnimationPriority.Action
+                track:Play(0.1)
+                ikatSiklusTrack(track, itemEmote.id)
+                return
+            end
+        end
+
+        -- Tahap 2: Gunakan fungsi bawaan Roblox HumanoidDescription:AddEmote + PlayEmoteAndGetAnimTrackById
+        local okNative, hasil1, hasil2 = pcall(function()
+            local deskripsi = humSaatIni:FindFirstChildOfClass("HumanoidDescription")
+            if deskripsi then
+                deskripsi:AddEmote(tostring(itemEmote.name or itemEmote.id), itemEmote.id)
+            end
+            return humSaatIni:PlayEmoteAndGetAnimTrackById(itemEmote.id)
+        end)
+
+        local trackNative = nil
+        if okNative then
+            if typeof(hasil1) == "Instance" and hasil1:IsA("AnimationTrack") then
+                trackNative = hasil1
+            elseif typeof(hasil2) == "Instance" and hasil2:IsA("AnimationTrack") then
+                trackNative = hasil2
+            end
+        end
+
+        if trackNative then
+            ikatSiklusTrack(trackNative, itemEmote.id)
             return
         end
 
-        local curChar = LocalPlayer.Character
-        local curHum = curChar and curChar:FindFirstChildOfClass("Humanoid")
-        local curAnim = curHum and curHum:FindFirstChildOfClass("Animator")
-        if not curHum or curHum.Health <= 0 or not curAnim then return end
-
-        local anim = Instance.new("Animation")
-        anim.AnimationId = animId
-
-        local loadOk, track = pcall(function()
-            return curAnim:LoadAnimation(anim)
+        -- Tahap 3: Cadangan terakhir jika user memasukkan AnimationId mentah secara langsung
+        local animMentah = Instance.new("Animation")
+        animMentah.AnimationId = "rbxassetid://" .. tostring(itemEmote.id)
+        local okMentah, trackMentah = pcall(function()
+            return animSaatIni:LoadAnimation(animMentah)
         end)
-        anim:Destroy()
+        animMentah:Destroy()
 
-        if loadOk and track then
-            track.Priority = Enum.AnimationPriority.Action
-            track:Play(0.1)
-            track:AdjustSpeed(State.Speed)
-
-            State.CurrentTrack = track
-            State.ActiveEmoteId = emoteItem.id
-
-            track.Stopped:Connect(function()
-                if State.CurrentTrack == track then
-                    State.CurrentTrack = nil
-                    State.ActiveEmoteId = nil
-                end
-            end)
+        if okMentah and trackMentah then
+            trackMentah.Priority = Enum.AnimationPriority.Action
+            trackMentah:Play(0.1)
+            ikatSiklusTrack(trackMentah, itemEmote.id)
         else
-            local nativeOk, nativeTrack = pcall(function()
-                return curHum:PlayEmoteAndGetAnimTrackById(emoteItem.id)
-            end)
-            if nativeOk and nativeTrack then
-                nativeTrack:AdjustSpeed(State.Speed)
-                State.CurrentTrack = nativeTrack
-                State.ActiveEmoteId = emoteItem.id
-            else
-                showToast("Gagal memutar emote: " .. tostring(emoteItem.name), COLORS.Danger)
-            end
+            tampilkanNotif("Gagal memutar emote: " .. tostring(itemEmote.name), WARNA.Bahaya)
         end
     end)
 end
 
 -- ============================================================
--- 10. UI CONSTRUCTION (CUSTOM RADIAL WHEEL + TOPBAR BUTTON)
+-- 10. PEMBUATAN ANTARMUKA UI (RODA EMOTE + TOMBOL TOPBAR DRAGGABLE)
 -- ============================================================
-local GuiParent = getGuiParent()
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "KurooEmote_UI"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.IgnoreGuiInset = true
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.DisplayOrder = 100
-ScreenGui.Parent = GuiParent
+local IndukGui = ambilIndukGui()
+local LayarGui = Instance.new("ScreenGui")
+LayarGui.Name = "KurooEmote_UI"
+LayarGui.ResetOnSpawn = false
+LayarGui.IgnoreGuiInset = true
+LayarGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+LayarGui.DisplayOrder = 100
+LayarGui.Parent = IndukGui
 
 -- ------------------------------------------------------------
--- 10A. Toast Notification Container
+-- 10A. Wadah Notifikasi Melayang (Toast)
 -- ------------------------------------------------------------
-local ToastContainer = Instance.new("Frame")
-ToastContainer.Name = "ToastContainer"
-ToastContainer.AnchorPoint = Vector2.new(0.5, 0)
-ToastContainer.Position = UDim2.new(0.5, 0, 0, 68)
-ToastContainer.Size = UDim2.new(0, 360, 0, 200)
-ToastContainer.BackgroundTransparency = 1
-ToastContainer.ZIndex = 50
-ToastContainer.Parent = ScreenGui
+local WadahNotif = Instance.new("Frame")
+WadahNotif.Name = "WadahNotif"
+WadahNotif.AnchorPoint = Vector2.new(0.5, 0)
+WadahNotif.Position = UDim2.new(0.5, 0, 0, 68)
+WadahNotif.Size = UDim2.new(0, 380, 0, 200)
+WadahNotif.BackgroundTransparency = 1
+WadahNotif.ZIndex = 50
+WadahNotif.Parent = LayarGui
 
-local ToastLayout = Instance.new("UIListLayout")
-ToastLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ToastLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-ToastLayout.Padding = UDim.new(0, 6)
-ToastLayout.Parent = ToastContainer
+local LayoutNotif = Instance.new("UIListLayout")
+LayoutNotif.SortOrder = Enum.SortOrder.LayoutOrder
+LayoutNotif.HorizontalAlignment = Enum.HorizontalAlignment.Center
+LayoutNotif.Padding = UDim.new(0, 6)
+LayoutNotif.Parent = WadahNotif
 
-showToast = function(message, accentColor)
-    if State.IsDestroyed or not ToastContainer.Parent then return end
-    accentColor = accentColor or COLORS.Accent
+tampilkanNotif = function(pesan, warnaAksen)
+    if Status.SudahDihancurkan or not WadahNotif.Parent then return end
+    warnaAksen = warnaAksen or WARNA.Aksen
 
-    local toast = Instance.new("Frame")
-    toast.Size = UDim2.new(0, 0, 0, 34)
-    toast.AutomaticSize = Enum.AutomaticSize.X
-    toast.BackgroundColor3 = Color3.fromRGB(18, 19, 24)
-    toast.BackgroundTransparency = 0.08
-    toast.BorderSizePixel = 0
-    toast.ZIndex = 51
-    toast.Parent = ToastContainer
+    local kartu = Instance.new("Frame")
+    kartu.Size = UDim2.new(0, 0, 0, 34)
+    kartu.AutomaticSize = Enum.AutomaticSize.X
+    kartu.BackgroundColor3 = Color3.fromRGB(18, 19, 24)
+    kartu.BackgroundTransparency = 0.08
+    kartu.BorderSizePixel = 0
+    kartu.ZIndex = 51
+    kartu.Parent = WadahNotif
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
-    corner.Parent = toast
+    local sudut = Instance.new("UICorner")
+    sudut.CornerRadius = UDim.new(0, 10)
+    sudut.Parent = kartu
 
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = accentColor
-    stroke.Thickness = 1.4
-    stroke.Transparency = 0.25
-    stroke.Parent = toast
+    local garis = Instance.new("UIStroke")
+    garis.Color = warnaAksen
+    garis.Thickness = 1.4
+    garis.Transparency = 0.25
+    garis.Parent = kartu
 
-    local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 14)
-    pad.PaddingRight = UDim.new(0, 14)
-    pad.Parent = toast
+    local jarak = Instance.new("UIPadding")
+    jarak.PaddingLeft = UDim.new(0, 14)
+    jarak.PaddingRight = UDim.new(0, 14)
+    jarak.Parent = kartu
 
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
@@ -577,1255 +760,1465 @@ showToast = function(message, accentColor)
     label.AutomaticSize = Enum.AutomaticSize.X
     label.Font = Enum.Font.GothamMedium
     label.TextSize = 13
-    label.TextColor3 = COLORS.TextPrimary
-    label.Text = tostring(message)
+    label.TextColor3 = WARNA.TeksUtama
+    label.Text = tostring(pesan)
     label.ZIndex = 52
-    label.Parent = toast
+    label.Parent = kartu
 
-    toast.BackgroundTransparency = 1
+    kartu.BackgroundTransparency = 1
     label.TextTransparency = 1
-    stroke.Transparency = 1
+    garis.Transparency = 1
 
-    TweenService:Create(toast, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+    TweenService:Create(kartu, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
         BackgroundTransparency = 0.08,
     }):Play()
     TweenService:Create(label, TweenInfo.new(0.18), { TextTransparency = 0 }):Play()
-    TweenService:Create(stroke, TweenInfo.new(0.18), { Transparency = 0.25 }):Play()
+    TweenService:Create(garis, TweenInfo.new(0.18), { Transparency = 0.25 }):Play()
 
     task.delay(2.4, function()
-        if not toast or not toast.Parent then return end
-        local t = TweenService:Create(toast, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        if not kartu or not kartu.Parent then return end
+        local animKeluar = TweenService:Create(kartu, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
             BackgroundTransparency = 1,
         })
         TweenService:Create(label, TweenInfo.new(0.22), { TextTransparency = 1 }):Play()
-        TweenService:Create(stroke, TweenInfo.new(0.22), { Transparency = 1 }):Play()
-        t:Play()
-        t.Completed:Wait()
-        if toast and toast.Parent then
-            toast:Destroy()
+        TweenService:Create(garis, TweenInfo.new(0.22), { Transparency = 1 }):Play()
+        animKeluar:Play()
+        animKeluar.Completed:Wait()
+        if kartu and kartu.Parent then
+            kartu:Destroy()
         end
     end)
 end
 
 -- ------------------------------------------------------------
--- 10B. Topbar Circle Button (Smiley Icon, Auto-Scaled PC/Mobile)
+-- 10B. Tombol Lingkaran Ikon Senyum (☺) — Bisa Di-Drag di HP & PC
 -- ------------------------------------------------------------
-local TopbarBtn = Instance.new("TextButton")
-TopbarBtn.Name = "KurooEmoteTopbarBtn"
-TopbarBtn.Text = ""
-TopbarBtn.AutoButtonColor = false
-TopbarBtn.BackgroundColor3 = Color3.fromRGB(18, 19, 23)
-TopbarBtn.BackgroundTransparency = 0.18
-TopbarBtn.BorderSizePixel = 0
-TopbarBtn.ZIndex = 40
-TopbarBtn.Parent = ScreenGui
+local TombolIkonEmote = Instance.new("TextButton")
+TombolIkonEmote.Name = "TombolIkonEmote"
+TombolIkonEmote.Text = ""
+TombolIkonEmote.AutoButtonColor = false
+TombolIkonEmote.BackgroundColor3 = Color3.fromRGB(18, 19, 23)
+TombolIkonEmote.BackgroundTransparency = 0.18
+TombolIkonEmote.BorderSizePixel = 0
+TombolIkonEmote.ZIndex = 40
+TombolIkonEmote.Parent = LayarGui
 
-local TopbarCorner = Instance.new("UICorner")
-TopbarCorner.CornerRadius = UDim.new(1, 0)
-TopbarCorner.Parent = TopbarBtn
+local SudutIkonEmote = Instance.new("UICorner")
+SudutIkonEmote.CornerRadius = UDim.new(1, 0)
+SudutIkonEmote.Parent = TombolIkonEmote
 
-local TopbarStroke = Instance.new("UIStroke")
-TopbarStroke.Color = Color3.fromRGB(95, 100, 118)
-TopbarStroke.Thickness = 1.4
-TopbarStroke.Transparency = 0.35
-TopbarStroke.Parent = TopbarBtn
+local GarisIkonEmote = Instance.new("UIStroke")
+GarisIkonEmote.Color = Color3.fromRGB(95, 100, 118)
+GarisIkonEmote.Thickness = 1.4
+GarisIkonEmote.Transparency = 0.35
+GarisIkonEmote.Parent = TombolIkonEmote
 
-local SmileyLabel = Instance.new("TextLabel")
-SmileyLabel.Name = "SmileyIcon"
-SmileyLabel.BackgroundTransparency = 1
-SmileyLabel.Size = UDim2.new(1, 0, 1, 0)
-SmileyLabel.Position = UDim2.new(0, 0, 0, -1)
-SmileyLabel.Font = Enum.Font.GothamBold
-SmileyLabel.Text = "☺"
-SmileyLabel.TextColor3 = COLORS.TextPrimary
-SmileyLabel.TextScaled = false
-SmileyLabel.TextSize = 24
-SmileyLabel.ZIndex = 41
-SmileyLabel.Parent = TopbarBtn
-
--- ------------------------------------------------------------
--- 10C. Main Overlay Root (Responsive UIScale)
--- ------------------------------------------------------------
-local WheelRoot = Instance.new("Frame")
-WheelRoot.Name = "WheelRoot"
-WheelRoot.AnchorPoint = Vector2.new(0.5, 0.5)
-WheelRoot.Position = UDim2.new(0.5, 0, 0.5, 8)
-WheelRoot.Size = UDim2.new(0, 560, 0, 495)
-WheelRoot.BackgroundTransparency = 1
-WheelRoot.Visible = false
-WheelRoot.ZIndex = 10
-WheelRoot.Parent = ScreenGui
-
-local RootScale = Instance.new("UIScale")
-RootScale.Scale = 1
-RootScale.Parent = WheelRoot
+local LabelSenyum = Instance.new("TextLabel")
+LabelSenyum.Name = "IkonSenyum"
+LabelSenyum.BackgroundTransparency = 1
+LabelSenyum.Size = UDim2.new(1, 0, 1, 0)
+LabelSenyum.Position = UDim2.new(0, 0, 0, -1)
+LabelSenyum.Font = Enum.Font.GothamBold
+LabelSenyum.Text = "☺"
+LabelSenyum.TextColor3 = WARNA.TeksUtama
+LabelSenyum.TextScaled = false
+LabelSenyum.TextSize = 24
+LabelSenyum.ZIndex = 41
+LabelSenyum.Parent = TombolIkonEmote
 
 -- ------------------------------------------------------------
--- 10D. Watermark ("KurooEmote") Above Search Bar
+-- 10C. Wadah Utama Roda Emote (Otomatis Menyesuaikan Ukuran Layar)
 -- ------------------------------------------------------------
-local WatermarkLabel = Instance.new("TextLabel")
-WatermarkLabel.Name = "Watermark"
-WatermarkLabel.AnchorPoint = Vector2.new(0.5, 0)
-WatermarkLabel.Position = UDim2.new(0.5, 0, 0, 0)
-WatermarkLabel.Size = UDim2.new(0, 320, 0, 22)
-WatermarkLabel.BackgroundTransparency = 1
-WatermarkLabel.Font = Enum.Font.GothamBold
-WatermarkLabel.TextSize = 15
-WatermarkLabel.TextColor3 = COLORS.TextPrimary
-WatermarkLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-WatermarkLabel.TextStrokeTransparency = 0.55
-WatermarkLabel.RichText = true
-WatermarkLabel.Text = '<font color="#00CFFF">Kuroo</font>Emote  <font size="11" color="#A8AEBE">v' .. VERSION .. "</font>"
-WatermarkLabel.ZIndex = 15
-WatermarkLabel.Parent = WheelRoot
+local WadahWheel = Instance.new("Frame")
+WadahWheel.Name = "WadahWheel"
+WadahWheel.AnchorPoint = Vector2.new(0.5, 0.5)
+WadahWheel.Position = UDim2.new(0.5, 0, 0.5, 8)
+WadahWheel.Size = UDim2.new(0, 560, 0, 502)
+WadahWheel.BackgroundTransparency = 1
+WadahWheel.Visible = false
+WadahWheel.ZIndex = 10
+WadahWheel.Parent = LayarGui
+
+local SkalaWheel = Instance.new("UIScale")
+SkalaWheel.Scale = 1
+SkalaWheel.Parent = WadahWheel
 
 -- ------------------------------------------------------------
--- 10E. Search Bar (Name / Emote ID) Above Emote Wheel
+-- 10D. Watermark "KurooEmote" di Atas Pencarian
 -- ------------------------------------------------------------
-local SearchFrame = Instance.new("Frame")
-SearchFrame.Name = "SearchFrame"
-SearchFrame.AnchorPoint = Vector2.new(0.5, 0)
-SearchFrame.Position = UDim2.new(0.5, 0, 0, 26)
-SearchFrame.Size = UDim2.new(0, 310, 0, 36)
-SearchFrame.BackgroundColor3 = COLORS.PanelBg
-SearchFrame.BackgroundTransparency = 0.1
-SearchFrame.BorderSizePixel = 0
-SearchFrame.ZIndex = 15
-SearchFrame.Parent = WheelRoot
-
-local SearchCorner = Instance.new("UICorner")
-SearchCorner.CornerRadius = UDim.new(0, 18)
-SearchCorner.Parent = SearchFrame
-
-local SearchStroke = Instance.new("UIStroke")
-SearchStroke.Color = COLORS.PanelStroke
-SearchStroke.Thickness = 1.3
-SearchStroke.Parent = SearchFrame
-
-local SearchIcon = Instance.new("TextLabel")
-SearchIcon.BackgroundTransparency = 1
-SearchIcon.Position = UDim2.new(0, 12, 0, 0)
-SearchIcon.Size = UDim2.new(0, 20, 1, 0)
-SearchIcon.Font = Enum.Font.GothamBold
-SearchIcon.TextSize = 14
-SearchIcon.TextColor3 = COLORS.TextSecondary
-SearchIcon.Text = "🔍"
-SearchIcon.ZIndex = 16
-SearchIcon.Parent = SearchFrame
-
-local SearchBox = Instance.new("TextBox")
-SearchBox.Name = "SearchBox"
-SearchBox.BackgroundTransparency = 1
-SearchBox.Position = UDim2.new(0, 36, 0, 0)
-SearchBox.Size = UDim2.new(1, -68, 1, 0)
-SearchBox.Font = Enum.Font.Gotham
-SearchBox.TextSize = 13
-SearchBox.TextColor3 = COLORS.TextPrimary
-SearchBox.PlaceholderColor3 = COLORS.TextMuted
-SearchBox.PlaceholderText = "Cari nama emote / masukkan ID..."
-SearchBox.Text = ""
-SearchBox.ClearTextOnFocus = false
-SearchBox.TextXAlignment = Enum.TextXAlignment.Left
-SearchBox.ZIndex = 16
-SearchBox.Parent = SearchFrame
-
-local ClearSearchBtn = Instance.new("TextButton")
-ClearSearchBtn.Name = "ClearSearch"
-ClearSearchBtn.AnchorPoint = Vector2.new(1, 0.5)
-ClearSearchBtn.Position = UDim2.new(1, -8, 0.5, 0)
-ClearSearchBtn.Size = UDim2.new(0, 22, 0, 22)
-ClearSearchBtn.BackgroundColor3 = Color3.fromRGB(45, 47, 56)
-ClearSearchBtn.BackgroundTransparency = 0.3
-ClearSearchBtn.Font = Enum.Font.GothamBold
-ClearSearchBtn.TextSize = 12
-ClearSearchBtn.TextColor3 = COLORS.TextSecondary
-ClearSearchBtn.Text = "×"
-ClearSearchBtn.Visible = false
-ClearSearchBtn.ZIndex = 17
-ClearSearchBtn.Parent = SearchFrame
-
-local ClearCorner = Instance.new("UICorner")
-ClearCorner.CornerRadius = UDim.new(1, 0)
-ClearCorner.Parent = ClearSearchBtn
+local LabelWatermark = Instance.new("TextLabel")
+LabelWatermark.Name = "Watermark"
+LabelWatermark.AnchorPoint = Vector2.new(0.5, 0)
+LabelWatermark.Position = UDim2.new(0.5, 0, 0, 0)
+LabelWatermark.Size = UDim2.new(0, 320, 0, 22)
+LabelWatermark.BackgroundTransparency = 1
+LabelWatermark.Font = Enum.Font.GothamBold
+LabelWatermark.TextSize = 15
+LabelWatermark.TextColor3 = WARNA.TeksUtama
+LabelWatermark.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+LabelWatermark.TextStrokeTransparency = 0.55
+LabelWatermark.RichText = true
+LabelWatermark.Text = '<font color="#00CFFF">Kuroo</font>Emote  <font size="11" color="#A8AEBE">v' .. VERSI .. "</font>"
+LabelWatermark.ZIndex = 15
+LabelWatermark.Parent = WadahWheel
 
 -- ------------------------------------------------------------
--- 10F. Left Side Control: Speed Input (0.05 - 10)
+-- 10E. Kolom Pencarian Nama Emote / ID Emote di Atas Wheel
 -- ------------------------------------------------------------
-local SpeedPanel = Instance.new("Frame")
-SpeedPanel.Name = "SpeedPanel"
-SpeedPanel.AnchorPoint = Vector2.new(1, 0.5)
-SpeedPanel.Position = UDim2.new(0.5, -186, 0, 250)
-SpeedPanel.Size = UDim2.new(0, 86, 0, 76)
-SpeedPanel.BackgroundColor3 = COLORS.PanelBg
-SpeedPanel.BackgroundTransparency = 0.12
-SpeedPanel.BorderSizePixel = 0
-SpeedPanel.ZIndex = 15
-SpeedPanel.Parent = WheelRoot
+local BingkaiCari = Instance.new("Frame")
+BingkaiCari.Name = "BingkaiCari"
+BingkaiCari.AnchorPoint = Vector2.new(0.5, 0)
+BingkaiCari.Position = UDim2.new(0.5, 0, 0, 26)
+BingkaiCari.Size = UDim2.new(0, 310, 0, 36)
+BingkaiCari.BackgroundColor3 = WARNA.LatarPanel
+BingkaiCari.BackgroundTransparency = 0.1
+BingkaiCari.BorderSizePixel = 0
+BingkaiCari.ZIndex = 15
+BingkaiCari.Parent = WadahWheel
 
-local SpeedCorner = Instance.new("UICorner")
-SpeedCorner.CornerRadius = UDim.new(0, 14)
-SpeedCorner.Parent = SpeedPanel
+local SudutCari = Instance.new("UICorner")
+SudutCari.CornerRadius = UDim.new(0, 18)
+SudutCari.Parent = BingkaiCari
 
-local SpeedStroke = Instance.new("UIStroke")
-SpeedStroke.Color = COLORS.PanelStroke
-SpeedStroke.Thickness = 1.3
-SpeedStroke.Parent = SpeedPanel
+local GarisCari = Instance.new("UIStroke")
+GarisCari.Color = WARNA.GarisPanel
+GarisCari.Thickness = 1.3
+GarisCari.Parent = BingkaiCari
 
-local SpeedTitle = Instance.new("TextLabel")
-SpeedTitle.BackgroundTransparency = 1
-SpeedTitle.Position = UDim2.new(0, 0, 0, 6)
-SpeedTitle.Size = UDim2.new(1, 0, 0, 16)
-SpeedTitle.Font = Enum.Font.GothamBold
-SpeedTitle.TextSize = 11
-SpeedTitle.TextColor3 = COLORS.TextSecondary
-SpeedTitle.Text = "SPEED"
-SpeedTitle.ZIndex = 16
-SpeedTitle.Parent = SpeedPanel
+local IkonCari = Instance.new("TextLabel")
+IkonCari.BackgroundTransparency = 1
+IkonCari.Position = UDim2.new(0, 12, 0, 0)
+IkonCari.Size = UDim2.new(0, 20, 1, 0)
+IkonCari.Font = Enum.Font.GothamBold
+IkonCari.TextSize = 14
+IkonCari.TextColor3 = WARNA.TeksSekunder
+IkonCari.Text = "🔍"
+IkonCari.ZIndex = 16
+IkonCari.Parent = BingkaiCari
 
-local SpeedBox = Instance.new("TextBox")
-SpeedBox.Name = "SpeedBox"
-SpeedBox.AnchorPoint = Vector2.new(0.5, 0)
-SpeedBox.Position = UDim2.new(0.5, 0, 0, 24)
-SpeedBox.Size = UDim2.new(1, -18, 0, 28)
-SpeedBox.BackgroundColor3 = Color3.fromRGB(32, 34, 42)
-SpeedBox.BorderSizePixel = 0
-SpeedBox.Font = Enum.Font.GothamBold
-SpeedBox.TextSize = 14
-SpeedBox.TextColor3 = COLORS.Accent
-SpeedBox.PlaceholderColor3 = COLORS.TextMuted
-SpeedBox.PlaceholderText = "1"
-SpeedBox.Text = tostring(DEFAULT_SPEED)
-SpeedBox.ClearTextOnFocus = false
-SpeedBox.ZIndex = 16
-SpeedBox.Parent = SpeedPanel
+local KotakCari = Instance.new("TextBox")
+KotakCari.Name = "KotakCari"
+KotakCari.BackgroundTransparency = 1
+KotakCari.Position = UDim2.new(0, 36, 0, 0)
+KotakCari.Size = UDim2.new(1, -68, 1, 0)
+KotakCari.Font = Enum.Font.Gotham
+KotakCari.TextSize = 13
+KotakCari.TextColor3 = WARNA.TeksUtama
+KotakCari.PlaceholderColor3 = WARNA.TeksRedup
+KotakCari.PlaceholderText = "Cari nama emote / masukkan ID..."
+KotakCari.Text = ""
+KotakCari.ClearTextOnFocus = false
+KotakCari.TextXAlignment = Enum.TextXAlignment.Left
+KotakCari.ZIndex = 16
+KotakCari.Parent = BingkaiCari
 
-local SpeedBoxCorner = Instance.new("UICorner")
-SpeedBoxCorner.CornerRadius = UDim.new(0, 8)
-SpeedBoxCorner.Parent = SpeedBox
+local TombolHapusCari = Instance.new("TextButton")
+TombolHapusCari.Name = "TombolHapusCari"
+TombolHapusCari.AnchorPoint = Vector2.new(1, 0.5)
+TombolHapusCari.Position = UDim2.new(1, -8, 0.5, 0)
+TombolHapusCari.Size = UDim2.new(0, 22, 0, 22)
+TombolHapusCari.BackgroundColor3 = Color3.fromRGB(45, 47, 56)
+TombolHapusCari.BackgroundTransparency = 0.3
+TombolHapusCari.Font = Enum.Font.GothamBold
+TombolHapusCari.TextSize = 12
+TombolHapusCari.TextColor3 = WARNA.TeksSekunder
+TombolHapusCari.Text = "×"
+TombolHapusCari.Visible = false
+TombolHapusCari.ZIndex = 17
+TombolHapusCari.Parent = BingkaiCari
 
-local SpeedHint = Instance.new("TextLabel")
-SpeedHint.BackgroundTransparency = 1
-SpeedHint.Position = UDim2.new(0, 0, 1, -18)
-SpeedHint.Size = UDim2.new(1, 0, 0, 14)
-SpeedHint.Font = Enum.Font.Gotham
-SpeedHint.TextSize = 9
-SpeedHint.TextColor3 = COLORS.TextMuted
-SpeedHint.Text = "0.05 - 10x"
-SpeedHint.ZIndex = 16
-SpeedHint.Parent = SpeedPanel
-
--- ------------------------------------------------------------
--- 10G. Right Side Control: Star Icon Button (Fav / Unfav Mode)
--- ------------------------------------------------------------
-local StarPanel = Instance.new("Frame")
-StarPanel.Name = "StarPanel"
-StarPanel.AnchorPoint = Vector2.new(0, 0.5)
-StarPanel.Position = UDim2.new(0.5, 186, 0, 250)
-StarPanel.Size = UDim2.new(0, 74, 0, 76)
-StarPanel.BackgroundTransparency = 1
-StarPanel.ZIndex = 15
-StarPanel.Parent = WheelRoot
-
-local StarBtn = Instance.new("TextButton")
-StarBtn.Name = "StarBtn"
-StarBtn.AnchorPoint = Vector2.new(0.5, 0)
-StarBtn.Position = UDim2.new(0.5, 0, 0, 4)
-StarBtn.Size = UDim2.new(0, 52, 0, 52)
-StarBtn.BackgroundColor3 = COLORS.PanelBg
-StarBtn.BackgroundTransparency = 0.1
-StarBtn.AutoButtonColor = false
-StarBtn.Font = Enum.Font.GothamBold
-StarBtn.TextSize = 26
-StarBtn.TextColor3 = COLORS.TextSecondary
-StarBtn.Text = "★"
-StarBtn.ZIndex = 16
-StarBtn.Parent = StarPanel
-
-local StarBtnCorner = Instance.new("UICorner")
-StarBtnCorner.CornerRadius = UDim.new(1, 0)
-StarBtnCorner.Parent = StarBtn
-
-local StarBtnStroke = Instance.new("UIStroke")
-StarBtnStroke.Color = COLORS.PanelStroke
-StarBtnStroke.Thickness = 1.5
-StarBtnStroke.Parent = StarBtn
-
-local StarCaption = Instance.new("TextLabel")
-StarCaption.Name = "StarCaption"
-StarCaption.BackgroundTransparency = 1
-StarCaption.Position = UDim2.new(0, 0, 1, -16)
-StarCaption.Size = UDim2.new(1, 0, 0, 16)
-StarCaption.Font = Enum.Font.GothamBold
-StarCaption.TextSize = 10
-StarCaption.TextColor3 = COLORS.TextSecondary
-StarCaption.Text = "FAVORIT"
-StarCaption.ZIndex = 16
-StarCaption.Parent = StarPanel
+local SudutHapusCari = Instance.new("UICorner")
+SudutHapusCari.CornerRadius = UDim.new(1, 0)
+SudutHapusCari.Parent = TombolHapusCari
 
 -- ------------------------------------------------------------
--- 10H. Center Radial Emote Wheel (8 Sectors Matching Reference)
+-- 10F. Panel Kiri: Input Kecepatan Emote (0.05x - 10x)
 -- ------------------------------------------------------------
-local WHEEL_SIZE = 344
-local INNER_SIZE = 148
-local SLOT_RADIUS = 120
+local PanelKecepatan = Instance.new("Frame")
+PanelKecepatan.Name = "PanelKecepatan"
+PanelKecepatan.AnchorPoint = Vector2.new(1, 0.5)
+PanelKecepatan.Position = UDim2.new(0.5, -186, 0, 250)
+PanelKecepatan.Size = UDim2.new(0, 86, 0, 76)
+PanelKecepatan.BackgroundColor3 = WARNA.LatarPanel
+PanelKecepatan.BackgroundTransparency = 0.12
+PanelKecepatan.BorderSizePixel = 0
+PanelKecepatan.ZIndex = 15
+PanelKecepatan.Parent = WadahWheel
 
-local WheelCircle = Instance.new("Frame")
-WheelCircle.Name = "WheelCircle"
-WheelCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-WheelCircle.Position = UDim2.new(0.5, 0, 0, 250)
-WheelCircle.Size = UDim2.new(0, WHEEL_SIZE, 0, WHEEL_SIZE)
-WheelCircle.BackgroundColor3 = COLORS.WheelBg
-WheelCircle.BackgroundTransparency = 0.14
-WheelCircle.BorderSizePixel = 0
-WheelCircle.ZIndex = 11
-WheelCircle.Parent = WheelRoot
+local SudutPanelKecepatan = Instance.new("UICorner")
+SudutPanelKecepatan.CornerRadius = UDim.new(0, 14)
+SudutPanelKecepatan.Parent = PanelKecepatan
 
-local WheelCorner = Instance.new("UICorner")
-WheelCorner.CornerRadius = UDim.new(1, 0)
-WheelCorner.Parent = WheelCircle
+local GarisPanelKecepatan = Instance.new("UIStroke")
+GarisPanelKecepatan.Color = WARNA.GarisPanel
+GarisPanelKecepatan.Thickness = 1.3
+GarisPanelKecepatan.Parent = PanelKecepatan
 
-local WheelStroke = Instance.new("UIStroke")
-WheelStroke.Color = COLORS.WheelStroke
-WheelStroke.Thickness = 2
-WheelStroke.Parent = WheelCircle
+local JudulKecepatan = Instance.new("TextLabel")
+JudulKecepatan.BackgroundTransparency = 1
+JudulKecepatan.Position = UDim2.new(0, 0, 0, 6)
+JudulKecepatan.Size = UDim2.new(1, 0, 0, 16)
+JudulKecepatan.Font = Enum.Font.GothamBold
+JudulKecepatan.TextSize = 10
+JudulKecepatan.TextColor3 = WARNA.TeksSekunder
+JudulKecepatan.Text = "KECEPATAN"
+JudulKecepatan.ZIndex = 16
+JudulKecepatan.Parent = PanelKecepatan
 
--- 8 Crisp White Radial Divider Lines (at 22.5 + 45*k degrees)
-local dividerLength = (WHEEL_SIZE - INNER_SIZE) / 2 - 4
-local dividerMidDist = (INNER_SIZE / 2) + (dividerLength / 2)
+local KotakKecepatan = Instance.new("TextBox")
+KotakKecepatan.Name = "KotakKecepatan"
+KotakKecepatan.AnchorPoint = Vector2.new(0.5, 0)
+KotakKecepatan.Position = UDim2.new(0.5, 0, 0, 24)
+KotakKecepatan.Size = UDim2.new(1, -18, 0, 28)
+KotakKecepatan.BackgroundColor3 = Color3.fromRGB(32, 34, 42)
+KotakKecepatan.BorderSizePixel = 0
+KotakKecepatan.Font = Enum.Font.GothamBold
+KotakKecepatan.TextSize = 14
+KotakKecepatan.TextColor3 = WARNA.Aksen
+KotakKecepatan.PlaceholderColor3 = WARNA.TeksRedup
+KotakKecepatan.PlaceholderText = "1"
+KotakKecepatan.Text = tostring(KECEPATAN_DEFAULT)
+KotakKecepatan.ClearTextOnFocus = false
+KotakKecepatan.ZIndex = 16
+KotakKecepatan.Parent = PanelKecepatan
+
+local SudutKotakKecepatan = Instance.new("UICorner")
+SudutKotakKecepatan.CornerRadius = UDim.new(0, 8)
+SudutKotakKecepatan.Parent = KotakKecepatan
+
+local PetunjukKecepatan = Instance.new("TextLabel")
+PetunjukKecepatan.BackgroundTransparency = 1
+PetunjukKecepatan.Position = UDim2.new(0, 0, 1, -18)
+PetunjukKecepatan.Size = UDim2.new(1, 0, 0, 14)
+PetunjukKecepatan.Font = Enum.Font.Gotham
+PetunjukKecepatan.TextSize = 9
+PetunjukKecepatan.TextColor3 = WARNA.TeksRedup
+PetunjukKecepatan.Text = "0.05 - 10x"
+PetunjukKecepatan.ZIndex = 16
+PetunjukKecepatan.Parent = PanelKecepatan
+
+-- ------------------------------------------------------------
+-- 10G. Panel Kanan: Tombol Bintang (Mode Favorit / Unfav)
+-- ------------------------------------------------------------
+local PanelBintang = Instance.new("Frame")
+PanelBintang.Name = "PanelBintang"
+PanelBintang.AnchorPoint = Vector2.new(0, 0.5)
+PanelBintang.Position = UDim2.new(0.5, 186, 0, 250)
+PanelBintang.Size = UDim2.new(0, 74, 0, 76)
+PanelBintang.BackgroundTransparency = 1
+PanelBintang.ZIndex = 15
+PanelBintang.Parent = WadahWheel
+
+local TombolBintang = Instance.new("TextButton")
+TombolBintang.Name = "TombolBintang"
+TombolBintang.AnchorPoint = Vector2.new(0.5, 0)
+TombolBintang.Position = UDim2.new(0.5, 0, 0, 4)
+TombolBintang.Size = UDim2.new(0, 52, 0, 52)
+TombolBintang.BackgroundColor3 = WARNA.LatarPanel
+TombolBintang.BackgroundTransparency = 0.1
+TombolBintang.AutoButtonColor = false
+TombolBintang.Font = Enum.Font.GothamBold
+TombolBintang.TextSize = 26
+TombolBintang.TextColor3 = WARNA.TeksSekunder
+TombolBintang.Text = "★"
+TombolBintang.ZIndex = 16
+TombolBintang.Parent = PanelBintang
+
+local SudutTombolBintang = Instance.new("UICorner")
+SudutTombolBintang.CornerRadius = UDim.new(1, 0)
+SudutTombolBintang.Parent = TombolBintang
+
+local GarisTombolBintang = Instance.new("UIStroke")
+GarisTombolBintang.Color = WARNA.GarisPanel
+GarisTombolBintang.Thickness = 1.5
+GarisTombolBintang.Parent = TombolBintang
+
+local LabelBintang = Instance.new("TextLabel")
+LabelBintang.Name = "LabelBintang"
+LabelBintang.BackgroundTransparency = 1
+LabelBintang.Position = UDim2.new(0, 0, 1, -16)
+LabelBintang.Size = UDim2.new(1, 0, 0, 16)
+LabelBintang.Font = Enum.Font.GothamBold
+LabelBintang.TextSize = 10
+LabelBintang.TextColor3 = WARNA.TeksSekunder
+LabelBintang.Text = "FAVORIT"
+LabelBintang.ZIndex = 16
+LabelBintang.Parent = PanelBintang
+
+-- ------------------------------------------------------------
+-- 10H. Lingkaran Roda Emote 8-Slot (Sesuai Desain Referensi)
+-- ------------------------------------------------------------
+local UKURAN_WHEEL = 344
+local UKURAN_TENGAH = 148
+local JARAK_SLOT = 120
+
+local LingkaranWheel = Instance.new("Frame")
+LingkaranWheel.Name = "LingkaranWheel"
+LingkaranWheel.AnchorPoint = Vector2.new(0.5, 0.5)
+LingkaranWheel.Position = UDim2.new(0.5, 0, 0, 250)
+LingkaranWheel.Size = UDim2.new(0, UKURAN_WHEEL, 0, UKURAN_WHEEL)
+LingkaranWheel.BackgroundColor3 = WARNA.LatarWheel
+LingkaranWheel.BackgroundTransparency = 0.14
+LingkaranWheel.BorderSizePixel = 0
+LingkaranWheel.ZIndex = 11
+LingkaranWheel.Parent = WadahWheel
+
+local SudutWheel = Instance.new("UICorner")
+SudutWheel.CornerRadius = UDim.new(1, 0)
+SudutWheel.Parent = LingkaranWheel
+
+local GarisWheel = Instance.new("UIStroke")
+GarisWheel.Color = WARNA.GarisWheel
+GarisWheel.Thickness = 2
+GarisWheel.Parent = LingkaranWheel
+
+-- Buat 8 garis putih pembagi radial (setiap 45 derajat)
+local panjangGaris = (UKURAN_WHEEL - UKURAN_TENGAH) / 2 - 4
+local jarakTengahGaris = (UKURAN_TENGAH / 2) + (panjangGaris / 2)
 
 for i = 0, 7 do
-    local angleDeg = 22.5 + (i * 45)
-    local rad = math.rad(angleDeg - 90)
-    local cx = (WHEEL_SIZE / 2) + math.cos(rad) * dividerMidDist
-    local cy = (WHEEL_SIZE / 2) + math.sin(rad) * dividerMidDist
+    local sudutDerajat = 22.5 + (i * 45)
+    local radian = math.rad(sudutDerajat - 90)
+    local posX = (UKURAN_WHEEL / 2) + math.cos(radian) * jarakTengahGaris
+    local posY = (UKURAN_WHEEL / 2) + math.sin(radian) * jarakTengahGaris
 
-    local line = Instance.new("Frame")
-    line.Name = "Divider_" .. tostring(i + 1)
-    line.AnchorPoint = Vector2.new(0.5, 0.5)
-    line.Position = UDim2.new(0, cx, 0, cy)
-    line.Size = UDim2.new(0, 1.5, 0, dividerLength)
-    line.Rotation = angleDeg
-    line.BackgroundColor3 = COLORS.Divider
-    line.BackgroundTransparency = 0.25
-    line.BorderSizePixel = 0
-    line.ZIndex = 12
-    line.Parent = WheelCircle
+    local garis = Instance.new("Frame")
+    garis.Name = "Pembagi_" .. tostring(i + 1)
+    garis.AnchorPoint = Vector2.new(0.5, 0.5)
+    garis.Position = UDim2.new(0, posX, 0, posY)
+    garis.Size = UDim2.new(0, 1.5, 0, panjangGaris)
+    garis.Rotation = sudutDerajat
+    garis.BackgroundColor3 = WARNA.GarisPembagi
+    garis.BackgroundTransparency = 0.25
+    garis.BorderSizePixel = 0
+    garis.ZIndex = 12
+    garis.Parent = LingkaranWheel
 
-    local grad = Instance.new("UIGradient")
-    grad.Rotation = 90
-    grad.Transparency = NumberSequence.new({
+    local gradasi = Instance.new("UIGradient")
+    gradasi.Rotation = 90
+    gradasi.Transparency = NumberSequence.new({
         NumberSequenceKeypoint.new(0, 0.75),
         NumberSequenceKeypoint.new(0.45, 0.15),
         NumberSequenceKeypoint.new(1, 0.05),
     })
-    grad.Parent = line
+    gradasi.Parent = garis
 end
 
--- 8 Emote Slot Buttons
-local SlotButtons = {}
-local HoveredSlotIdx = nil
+-- Buat 8 tombol slot emote melingkar
+local DaftarTombolSlot = {}
+local IndeksSlotHover = nil
 
-for i = 1, SLOTS_PER_PAGE do
-    local angleDeg = (i - 1) * 45
-    local rad = math.rad(angleDeg - 90)
-    local sx = (WHEEL_SIZE / 2) + math.cos(rad) * SLOT_RADIUS
-    local sy = (WHEEL_SIZE / 2) + math.sin(rad) * SLOT_RADIUS
+for i = 1, SLOT_PER_HALAMAN do
+    local sudutDerajat = (i - 1) * 45
+    local radian = math.rad(sudutDerajat - 90)
+    local sx = (UKURAN_WHEEL / 2) + math.cos(radian) * JARAK_SLOT
+    local sy = (UKURAN_WHEEL / 2) + math.sin(radian) * JARAK_SLOT
 
-    local slotBtn = Instance.new("TextButton")
-    slotBtn.Name = "Slot_" .. tostring(i)
-    slotBtn.AnchorPoint = Vector2.new(0.5, 0.5)
-    slotBtn.Position = UDim2.new(0, sx, 0, sy)
-    slotBtn.Size = UDim2.new(0, 74, 0, 74)
-    slotBtn.BackgroundColor3 = COLORS.SlotIdle
-    slotBtn.BackgroundTransparency = 0.55
-    slotBtn.BorderSizePixel = 0
-    slotBtn.AutoButtonColor = false
-    slotBtn.Text = ""
-    slotBtn.ZIndex = 14
-    slotBtn.Parent = WheelCircle
+    local tombolSlot = Instance.new("TextButton")
+    tombolSlot.Name = "Slot_" .. tostring(i)
+    tombolSlot.AnchorPoint = Vector2.new(0.5, 0.5)
+    tombolSlot.Position = UDim2.new(0, sx, 0, sy)
+    tombolSlot.Size = UDim2.new(0, 74, 0, 74)
+    tombolSlot.BackgroundColor3 = WARNA.SlotNormal
+    tombolSlot.BackgroundTransparency = 0.55
+    tombolSlot.BorderSizePixel = 0
+    tombolSlot.AutoButtonColor = false
+    tombolSlot.Text = ""
+    tombolSlot.ZIndex = 14
+    tombolSlot.Parent = LingkaranWheel
 
-    local sCorner = Instance.new("UICorner")
-    sCorner.CornerRadius = UDim.new(1, 0)
-    sCorner.Parent = slotBtn
+    local sudutSlot = Instance.new("UICorner")
+    sudutSlot.CornerRadius = UDim.new(1, 0)
+    sudutSlot.Parent = tombolSlot
 
-    local sStroke = Instance.new("UIStroke")
-    sStroke.Color = COLORS.Accent
-    sStroke.Thickness = 2
-    sStroke.Transparency = 1
-    sStroke.Parent = slotBtn
+    local garisSlot = Instance.new("UIStroke")
+    garisSlot.Color = WARNA.Aksen
+    garisSlot.Thickness = 2
+    garisSlot.Transparency = 1
+    garisSlot.Parent = tombolSlot
 
-    local thumb = Instance.new("ImageLabel")
-    thumb.Name = "Thumb"
-    thumb.AnchorPoint = Vector2.new(0.5, 0.5)
-    thumb.Position = UDim2.new(0.5, 0, 0.44, 0)
-    thumb.Size = UDim2.new(0, 50, 0, 50)
-    thumb.BackgroundTransparency = 1
-    thumb.ScaleType = Enum.ScaleType.Fit
-    thumb.Image = ""
-    thumb.ZIndex = 15
-    thumb.Parent = slotBtn
+    local gambarThumb = Instance.new("ImageLabel")
+    gambarThumb.Name = "Thumbnail"
+    gambarThumb.AnchorPoint = Vector2.new(0.5, 0.5)
+    gambarThumb.Position = UDim2.new(0.5, 0, 0.44, 0)
+    gambarThumb.Size = UDim2.new(0, 50, 0, 50)
+    gambarThumb.BackgroundTransparency = 1
+    gambarThumb.ScaleType = Enum.ScaleType.Fit
+    gambarThumb.Image = ""
+    gambarThumb.ZIndex = 15
+    gambarThumb.Parent = tombolSlot
 
-    local slotName = Instance.new("TextLabel")
-    slotName.Name = "SlotName"
-    slotName.AnchorPoint = Vector2.new(0.5, 1)
-    slotName.Position = UDim2.new(0.5, 0, 1, -4)
-    slotName.Size = UDim2.new(1, -8, 0, 14)
-    slotName.BackgroundTransparency = 1
-    slotName.Font = Enum.Font.GothamMedium
-    slotName.TextSize = 9
-    slotName.TextColor3 = COLORS.TextPrimary
-    slotName.TextTruncate = Enum.TextTruncate.AtEnd
-    slotName.Text = ""
-    slotName.ZIndex = 16
-    slotName.Parent = slotBtn
+    local namaSlot = Instance.new("TextLabel")
+    namaSlot.Name = "NamaSlot"
+    namaSlot.AnchorPoint = Vector2.new(0.5, 1)
+    namaSlot.Position = UDim2.new(0.5, 0, 1, -4)
+    namaSlot.Size = UDim2.new(1, -8, 0, 14)
+    namaSlot.BackgroundTransparency = 1
+    namaSlot.Font = Enum.Font.GothamMedium
+    namaSlot.TextSize = 9
+    namaSlot.TextColor3 = WARNA.TeksUtama
+    namaSlot.TextTruncate = Enum.TextTruncate.AtEnd
+    namaSlot.Text = ""
+    namaSlot.ZIndex = 16
+    namaSlot.Parent = tombolSlot
 
-    local favBadge = Instance.new("TextLabel")
-    favBadge.Name = "FavBadge"
-    favBadge.AnchorPoint = Vector2.new(1, 0)
-    favBadge.Position = UDim2.new(1, -2, 0, 2)
-    favBadge.Size = UDim2.new(0, 18, 0, 18)
-    favBadge.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
-    favBadge.BackgroundTransparency = 0.2
-    favBadge.Font = Enum.Font.GothamBold
-    favBadge.TextSize = 11
-    favBadge.TextColor3 = COLORS.Gold
-    favBadge.Text = "★"
-    favBadge.Visible = false
-    favBadge.ZIndex = 17
-    favBadge.Parent = slotBtn
+    local lencanaFav = Instance.new("TextLabel")
+    lencanaFav.Name = "LencanaFav"
+    lencanaFav.AnchorPoint = Vector2.new(1, 0)
+    lencanaFav.Position = UDim2.new(1, -2, 0, 2)
+    lencanaFav.Size = UDim2.new(0, 18, 0, 18)
+    lencanaFav.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+    lencanaFav.BackgroundTransparency = 0.2
+    lencanaFav.Font = Enum.Font.GothamBold
+    lencanaFav.TextSize = 11
+    lencanaFav.TextColor3 = WARNA.Emas
+    lencanaFav.Text = "★"
+    lencanaFav.Visible = false
+    lencanaFav.ZIndex = 17
+    lencanaFav.Parent = tombolSlot
 
-    local badgeCorner = Instance.new("UICorner")
-    badgeCorner.CornerRadius = UDim.new(1, 0)
-    badgeCorner.Parent = favBadge
+    local sudutLencana = Instance.new("UICorner")
+    sudutLencana.CornerRadius = UDim.new(1, 0)
+    sudutLencana.Parent = lencanaFav
 
-    SlotButtons[i] = {
-        Button   = slotBtn,
-        Stroke   = sStroke,
-        Thumb    = thumb,
-        NameLbl  = slotName,
-        FavBadge = favBadge,
-        Emote    = nil,
+    DaftarTombolSlot[i] = {
+        Tombol     = tombolSlot,
+        Garis      = garisSlot,
+        Thumbnail  = gambarThumb,
+        LabelNama  = namaSlot,
+        LencanaFav = lencanaFav,
+        DataEmote  = nil,
     }
 end
 
--- Inner Center Dark Circle
-local CenterCircle = Instance.new("Frame")
-CenterCircle.Name = "CenterCircle"
-CenterCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-CenterCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
-CenterCircle.Size = UDim2.new(0, INNER_SIZE, 0, INNER_SIZE)
-CenterCircle.BackgroundColor3 = COLORS.CenterBg
-CenterCircle.BackgroundTransparency = 0.04
-CenterCircle.BorderSizePixel = 0
-CenterCircle.ZIndex = 18
-CenterCircle.Parent = WheelCircle
+-- Lingkaran Tengah Hitam (Menampilkan Mode, Nama Emote, & Nomor Halaman)
+local LingkaranTengah = Instance.new("Frame")
+LingkaranTengah.Name = "LingkaranTengah"
+LingkaranTengah.AnchorPoint = Vector2.new(0.5, 0.5)
+LingkaranTengah.Position = UDim2.new(0.5, 0, 0.5, 0)
+LingkaranTengah.Size = UDim2.new(0, UKURAN_TENGAH, 0, UKURAN_TENGAH)
+LingkaranTengah.BackgroundColor3 = WARNA.LatarTengah
+LingkaranTengah.BackgroundTransparency = 0.04
+LingkaranTengah.BorderSizePixel = 0
+LingkaranTengah.ZIndex = 18
+LingkaranTengah.Parent = LingkaranWheel
 
-local CenterCorner = Instance.new("UICorner")
-CenterCorner.CornerRadius = UDim.new(1, 0)
-CenterCorner.Parent = CenterCircle
+local SudutTengah = Instance.new("UICorner")
+SudutTengah.CornerRadius = UDim.new(1, 0)
+SudutTengah.Parent = LingkaranTengah
 
-local CenterStroke = Instance.new("UIStroke")
-CenterStroke.Color = COLORS.CenterStroke
-CenterStroke.Thickness = 1.6
-CenterStroke.Parent = CenterCircle
+local GarisTengah = Instance.new("UIStroke")
+GarisTengah.Color = WARNA.GarisTengah
+GarisTengah.Thickness = 1.6
+GarisTengah.Parent = LingkaranTengah
 
-local CenterModeLbl = Instance.new("TextLabel")
-CenterModeLbl.Name = "CenterMode"
-CenterModeLbl.AnchorPoint = Vector2.new(0.5, 0)
-CenterModeLbl.Position = UDim2.new(0.5, 0, 0, 18)
-CenterModeLbl.Size = UDim2.new(1, -24, 0, 14)
-CenterModeLbl.BackgroundTransparency = 1
-CenterModeLbl.Font = Enum.Font.GothamBold
-CenterModeLbl.TextSize = 10
-CenterModeLbl.TextColor3 = COLORS.Accent
-CenterModeLbl.Text = "ALL EMOTES"
-CenterModeLbl.ZIndex = 19
-CenterModeLbl.Parent = CenterCircle
+local LabelModeTengah = Instance.new("TextLabel")
+LabelModeTengah.Name = "LabelMode"
+LabelModeTengah.AnchorPoint = Vector2.new(0.5, 0)
+LabelModeTengah.Position = UDim2.new(0.5, 0, 0, 20)
+LabelModeTengah.Size = UDim2.new(1, -24, 0, 14)
+LabelModeTengah.BackgroundTransparency = 1
+LabelModeTengah.Font = Enum.Font.GothamBold
+LabelModeTengah.TextSize = 10
+LabelModeTengah.TextColor3 = WARNA.Aksen
+LabelModeTengah.Text = "SEMUA EMOTE"
+LabelModeTengah.ZIndex = 19
+LabelModeTengah.Parent = LingkaranTengah
 
-local CenterEmoteName = Instance.new("TextLabel")
-CenterEmoteName.Name = "CenterEmoteName"
-CenterEmoteName.AnchorPoint = Vector2.new(0.5, 0.5)
-CenterEmoteName.Position = UDim2.new(0.5, 0, 0.48, 0)
-CenterEmoteName.Size = UDim2.new(1, -22, 0, 44)
-CenterEmoteName.BackgroundTransparency = 1
-CenterEmoteName.Font = Enum.Font.GothamBold
-CenterEmoteName.TextSize = 13
-CenterEmoteName.TextWrapped = true
-CenterEmoteName.TextColor3 = COLORS.TextPrimary
-CenterEmoteName.Text = "Pilih Emote"
-CenterEmoteName.ZIndex = 19
-CenterEmoteName.Parent = CenterCircle
+local LabelNamaTengah = Instance.new("TextLabel")
+LabelNamaTengah.Name = "LabelNamaEmote"
+LabelNamaTengah.AnchorPoint = Vector2.new(0.5, 0.5)
+LabelNamaTengah.Position = UDim2.new(0.5, 0, 0.5, 0)
+LabelNamaTengah.Size = UDim2.new(1, -22, 0, 52)
+LabelNamaTengah.BackgroundTransparency = 1
+LabelNamaTengah.Font = Enum.Font.GothamBold
+LabelNamaTengah.TextSize = 13
+LabelNamaTengah.TextWrapped = true
+LabelNamaTengah.TextColor3 = WARNA.TeksUtama
+LabelNamaTengah.Text = "Pilih Emote"
+LabelNamaTengah.ZIndex = 19
+LabelNamaTengah.Parent = LingkaranTengah
 
--- Page Controls (< 1 / N >) inside bottom of center circle
-local PageBar = Instance.new("Frame")
-PageBar.Name = "PageBar"
-PageBar.AnchorPoint = Vector2.new(0.5, 1)
-PageBar.Position = UDim2.new(0.5, 0, 1, -16)
-PageBar.Size = UDim2.new(0, 108, 0, 24)
-PageBar.BackgroundTransparency = 1
-PageBar.ZIndex = 19
-PageBar.Parent = CenterCircle
-
-local PrevBtn = Instance.new("TextButton")
-PrevBtn.Name = "PrevBtn"
-PrevBtn.AnchorPoint = Vector2.new(0, 0.5)
-PrevBtn.Position = UDim2.new(0, 0, 0.5, 0)
-PrevBtn.Size = UDim2.new(0, 24, 0, 24)
-PrevBtn.BackgroundColor3 = Color3.fromRGB(34, 36, 44)
-PrevBtn.AutoButtonColor = false
-PrevBtn.Font = Enum.Font.GothamBold
-PrevBtn.TextSize = 14
-PrevBtn.TextColor3 = COLORS.TextPrimary
-PrevBtn.Text = "<"
-PrevBtn.ZIndex = 20
-PrevBtn.Parent = PageBar
-
-local PrevCorner = Instance.new("UICorner")
-PrevCorner.CornerRadius = UDim.new(1, 0)
-PrevCorner.Parent = PrevBtn
-
-local PageLabel = Instance.new("TextLabel")
-PageLabel.Name = "PageLabel"
-PageLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-PageLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
-PageLabel.Size = UDim2.new(0, 56, 1, 0)
-PageLabel.BackgroundTransparency = 1
-PageLabel.Font = Enum.Font.GothamMedium
-PageLabel.TextSize = 11
-PageLabel.TextColor3 = COLORS.TextSecondary
-PageLabel.Text = "1 / 1"
-PageLabel.ZIndex = 20
-PageLabel.Parent = PageBar
-
-local NextBtn = Instance.new("TextButton")
-NextBtn.Name = "NextBtn"
-NextBtn.AnchorPoint = Vector2.new(1, 0.5)
-NextBtn.Position = UDim2.new(1, 0, 0.5, 0)
-NextBtn.Size = UDim2.new(0, 24, 0, 24)
-NextBtn.BackgroundColor3 = Color3.fromRGB(34, 36, 44)
-NextBtn.AutoButtonColor = false
-NextBtn.Font = Enum.Font.GothamBold
-NextBtn.TextSize = 14
-NextBtn.TextColor3 = COLORS.TextPrimary
-NextBtn.Text = ">"
-NextBtn.ZIndex = 20
-NextBtn.Parent = PageBar
-
-local NextCorner = Instance.new("UICorner")
-NextCorner.CornerRadius = UDim.new(1, 0)
-NextCorner.Parent = NextBtn
+local LabelHalaman = Instance.new("TextLabel")
+LabelHalaman.Name = "LabelHalaman"
+LabelHalaman.AnchorPoint = Vector2.new(0.5, 1)
+LabelHalaman.Position = UDim2.new(0.5, 0, 1, -18)
+LabelHalaman.Size = UDim2.new(1, -26, 0, 18)
+LabelHalaman.BackgroundTransparency = 1
+LabelHalaman.Font = Enum.Font.GothamMedium
+LabelHalaman.TextSize = 11
+LabelHalaman.TextColor3 = WARNA.TeksSekunder
+LabelHalaman.Text = "1 / 1"
+LabelHalaman.ZIndex = 19
+LabelHalaman.Parent = LingkaranTengah
 
 -- ------------------------------------------------------------
--- 10I. Bottom Button: Open / Toggle Favorites List
+-- 10I. Bar Bawah: [ < ]   [ ★ Favorit (0) ]   [ > ]
+--      (Tombol < dan > Besar di Samping Favorit agar Nyaman di HP)
 -- ------------------------------------------------------------
-local FavViewBtn = Instance.new("TextButton")
-FavViewBtn.Name = "FavViewBtn"
-FavViewBtn.AnchorPoint = Vector2.new(0.5, 0)
-FavViewBtn.Position = UDim2.new(0.5, 0, 0, 434)
-FavViewBtn.Size = UDim2.new(0, 210, 0, 38)
-FavViewBtn.BackgroundColor3 = COLORS.PanelBg
-FavViewBtn.BackgroundTransparency = 0.08
-FavViewBtn.AutoButtonColor = false
-FavViewBtn.Font = Enum.Font.GothamBold
-FavViewBtn.TextSize = 13
-FavViewBtn.TextColor3 = COLORS.Gold
-FavViewBtn.Text = "★  Favorites (0)"
-FavViewBtn.ZIndex = 15
-FavViewBtn.Parent = WheelRoot
+local BarBawah = Instance.new("Frame")
+BarBawah.Name = "BarBawah"
+BarBawah.AnchorPoint = Vector2.new(0.5, 0)
+BarBawah.Position = UDim2.new(0.5, 0, 0, 434)
+BarBawah.Size = UDim2.new(0, 326, 0, 44)
+BarBawah.BackgroundTransparency = 1
+BarBawah.ZIndex = 15
+BarBawah.Parent = WadahWheel
 
-local FavViewCorner = Instance.new("UICorner")
-FavViewCorner.CornerRadius = UDim.new(0, 19)
-FavViewCorner.Parent = FavViewBtn
+local TombolSebelumnya = Instance.new("TextButton")
+TombolSebelumnya.Name = "TombolSebelumnya"
+TombolSebelumnya.AnchorPoint = Vector2.new(0, 0.5)
+TombolSebelumnya.Position = UDim2.new(0, 0, 0.5, 0)
+TombolSebelumnya.Size = UDim2.new(0, 44, 0, 44)
+TombolSebelumnya.BackgroundColor3 = WARNA.TombolNav
+TombolSebelumnya.BackgroundTransparency = 0.08
+TombolSebelumnya.AutoButtonColor = false
+TombolSebelumnya.Font = Enum.Font.GothamBold
+TombolSebelumnya.TextSize = 20
+TombolSebelumnya.TextColor3 = WARNA.TeksUtama
+TombolSebelumnya.Text = "<"
+TombolSebelumnya.ZIndex = 16
+TombolSebelumnya.Parent = BarBawah
 
-local FavViewStroke = Instance.new("UIStroke")
-FavViewStroke.Color = COLORS.Gold
-FavViewStroke.Thickness = 1.4
-FavViewStroke.Transparency = 0.35
-FavViewStroke.Parent = FavViewBtn
+local SudutSebelumnya = Instance.new("UICorner")
+SudutSebelumnya.CornerRadius = UDim.new(1, 0)
+SudutSebelumnya.Parent = TombolSebelumnya
 
-local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Name = "StatusLabel"
-StatusLabel.AnchorPoint = Vector2.new(0.5, 0)
-StatusLabel.Position = UDim2.new(0.5, 0, 0, 476)
-StatusLabel.Size = UDim2.new(0, 340, 0, 16)
-StatusLabel.BackgroundTransparency = 1
-StatusLabel.Font = Enum.Font.Gotham
-StatusLabel.TextSize = 10
-StatusLabel.TextColor3 = COLORS.TextMuted
-StatusLabel.Text = ""
-StatusLabel.ZIndex = 15
-StatusLabel.Parent = WheelRoot
+local GarisSebelumnya = Instance.new("UIStroke")
+GarisSebelumnya.Color = WARNA.GarisPanel
+GarisSebelumnya.Thickness = 1.4
+GarisSebelumnya.Parent = TombolSebelumnya
+
+local TombolDaftarFav = Instance.new("TextButton")
+TombolDaftarFav.Name = "TombolDaftarFav"
+TombolDaftarFav.AnchorPoint = Vector2.new(0.5, 0.5)
+TombolDaftarFav.Position = UDim2.new(0.5, 0, 0.5, 0)
+TombolDaftarFav.Size = UDim2.new(0, 214, 0, 40)
+TombolDaftarFav.BackgroundColor3 = WARNA.LatarPanel
+TombolDaftarFav.BackgroundTransparency = 0.08
+TombolDaftarFav.AutoButtonColor = false
+TombolDaftarFav.Font = Enum.Font.GothamBold
+TombolDaftarFav.TextSize = 13
+TombolDaftarFav.TextColor3 = WARNA.Emas
+TombolDaftarFav.Text = "★  Favorit (0)"
+TombolDaftarFav.ZIndex = 16
+TombolDaftarFav.Parent = BarBawah
+
+local SudutDaftarFav = Instance.new("UICorner")
+SudutDaftarFav.CornerRadius = UDim.new(0, 20)
+SudutDaftarFav.Parent = TombolDaftarFav
+
+local GarisDaftarFav = Instance.new("UIStroke")
+GarisDaftarFav.Color = WARNA.Emas
+GarisDaftarFav.Thickness = 1.4
+GarisDaftarFav.Transparency = 0.35
+GarisDaftarFav.Parent = TombolDaftarFav
+
+local TombolBerikutnya = Instance.new("TextButton")
+TombolBerikutnya.Name = "TombolBerikutnya"
+TombolBerikutnya.AnchorPoint = Vector2.new(1, 0.5)
+TombolBerikutnya.Position = UDim2.new(1, 0, 0.5, 0)
+TombolBerikutnya.Size = UDim2.new(0, 44, 0, 44)
+TombolBerikutnya.BackgroundColor3 = WARNA.TombolNav
+TombolBerikutnya.BackgroundTransparency = 0.08
+TombolBerikutnya.AutoButtonColor = false
+TombolBerikutnya.Font = Enum.Font.GothamBold
+TombolBerikutnya.TextSize = 20
+TombolBerikutnya.TextColor3 = WARNA.TeksUtama
+TombolBerikutnya.Text = ">"
+TombolBerikutnya.ZIndex = 16
+TombolBerikutnya.Parent = BarBawah
+
+local SudutBerikutnya = Instance.new("UICorner")
+SudutBerikutnya.CornerRadius = UDim.new(1, 0)
+SudutBerikutnya.Parent = TombolBerikutnya
+
+local GarisBerikutnya = Instance.new("UIStroke")
+GarisBerikutnya.Color = WARNA.GarisPanel
+GarisBerikutnya.Thickness = 1.4
+GarisBerikutnya.Parent = TombolBerikutnya
+
+local LabelStatus = Instance.new("TextLabel")
+LabelStatus.Name = "LabelStatus"
+LabelStatus.AnchorPoint = Vector2.new(0.5, 0)
+LabelStatus.Position = UDim2.new(0.5, 0, 0, 482)
+LabelStatus.Size = UDim2.new(0, 360, 0, 16)
+LabelStatus.BackgroundTransparency = 1
+LabelStatus.Font = Enum.Font.Gotham
+LabelStatus.TextSize = 10
+LabelStatus.TextColor3 = WARNA.TeksRedup
+LabelStatus.Text = ""
+LabelStatus.ZIndex = 15
+LabelStatus.Parent = WadahWheel
 
 -- ============================================================
--- 11. RESPONSIVE SCALING (PC & MOBILE AUTO-FIT)
+-- 11. PENYESUAIAN LAYAR OTOMATIS (RESPONSIF PC & MOBILE)
 -- ============================================================
-local function updateResponsiveLayout()
-    local cam = getCamera()
-    local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
-    local mobile = isMobileDevice() or (vp.X < 900)
+-- Pastikan posisi tombol ikon senyum tidak pernah keluar dari batas layar
+local function jagaPosisiIkonDalamLayar()
+    local kamera = ambilKamera()
+    local ukuranLayar = kamera and kamera.ViewportSize or Vector2.new(1280, 720)
+    local lebarTombol = TombolIkonEmote.Size.X.Offset
+    local tinggiTombol = TombolIkonEmote.Size.Y.Offset
+    local posX = math.clamp(TombolIkonEmote.Position.X.Offset, 6, math.max(6, ukuranLayar.X - lebarTombol - 6))
+    local posY = math.clamp(TombolIkonEmote.Position.Y.Offset, 6, math.max(6, ukuranLayar.Y - tinggiTombol - 6))
+    TombolIkonEmote.Position = UDim2.new(0, posX, 0, posY)
+end
 
-    local scaleX = (vp.X * 0.94) / 560
-    local scaleY = (vp.Y * 0.86) / 495
-    local targetScale = math.clamp(math.min(scaleX, scaleY), 0.48, 1.05)
-    RootScale.Scale = targetScale
+local function perbaruiTataLetakResponsif()
+    local kamera = ambilKamera()
+    local ukuranLayar = kamera and kamera.ViewportSize or Vector2.new(1280, 720)
+    local modeMobile = apakahPerangkatMobile() or (ukuranLayar.X < 900)
 
-    if mobile then
-        local btnSize = math.clamp(math.floor(vp.Y * 0.085), 34, 42)
-        TopbarBtn.Size = UDim2.new(0, btnSize, 0, btnSize)
-        TopbarBtn.Position = UDim2.new(0, 184, 0, 10)
-        SmileyLabel.TextSize = math.floor(btnSize * 0.62)
+    -- Skala otomatis seluruh wadah wheel agar pas di layar HP maupun monitor PC
+    local skalaX = (ukuranLayar.X * 0.94) / 560
+    local skalaY = (ukuranLayar.Y * 0.86) / 502
+    SkalaWheel.Scale = math.clamp(math.min(skalaX, skalaY), 0.48, 1.05)
+
+    -- Ukuran tombol ikon senyum menyesuaikan perangkat
+    if modeMobile then
+        local ukuranTombol = math.clamp(math.floor(ukuranLayar.Y * 0.085), 36, 44)
+        TombolIkonEmote.Size = UDim2.new(0, ukuranTombol, 0, ukuranTombol)
+        LabelSenyum.TextSize = math.floor(ukuranTombol * 0.62)
+        if not Status.PosisiIkonKustom then
+            TombolIkonEmote.Position = UDim2.new(0, 184, 0, 10)
+        end
     else
-        TopbarBtn.Size = UDim2.new(0, 44, 0, 44)
-        TopbarBtn.Position = UDim2.new(0, 224, 0, 12)
-        SmileyLabel.TextSize = 26
+        TombolIkonEmote.Size = UDim2.new(0, 44, 0, 44)
+        LabelSenyum.TextSize = 26
+        if not Status.PosisiIkonKustom then
+            TombolIkonEmote.Position = UDim2.new(0, 224, 0, 12)
+        end
+    end
+
+    if Status.PosisiIkonKustom then
+        jagaPosisiIkonDalamLayar()
     end
 end
 
-updateResponsiveLayout()
-local function bindViewportListener()
-    local cam = getCamera()
-    if cam then
-        trackConn(cam:GetPropertyChangedSignal("ViewportSize"):Connect(updateResponsiveLayout))
+perbaruiTataLetakResponsif()
+
+local function pasangPantauUkuranLayar()
+    local kamera = ambilKamera()
+    if kamera then
+        catatKoneksi(kamera:GetPropertyChangedSignal("ViewportSize"):Connect(perbaruiTataLetakResponsif))
     end
 end
-bindViewportListener()
-trackConn(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-    updateResponsiveLayout()
-    bindViewportListener()
+pasangPantauUkuranLayar()
+catatKoneksi(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+    perbaruiTataLetakResponsif()
+    pasangPantauUkuranLayar()
 end))
 
 -- ============================================================
--- 12. UI RENDER & REFRESH LOGIC
+-- 12. FITUR DRAG / GESER IKON EMOTE (SENTUH DI HP & MOUSE DI PC)
 -- ============================================================
-local function updateStarVisuals()
-    if State.ViewMode == "Favorites" then
-        StarCaption.Text = "UNFAV"
-        if State.StarMode then
-            StarBtn.BackgroundColor3 = COLORS.Danger
-            StarBtn.TextColor3 = COLORS.TextPrimary
-            StarBtnStroke.Color = COLORS.Danger
-            WheelStroke.Color = COLORS.Danger
-            CenterModeLbl.Text = "★ TAP TO UNFAV"
-            CenterModeLbl.TextColor3 = COLORS.Danger
+local sedangTahanIkon = false
+local ikonBaruDigeser = false
+local posisiInputAwal = Vector3.new()
+local posisiTombolAwal = UDim2.new()
+
+catatKoneksi(TombolIkonEmote.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        sedangTahanIkon = true
+        ikonBaruDigeser = false
+        posisiInputAwal = input.Position
+        posisiTombolAwal = TombolIkonEmote.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                sedangTahanIkon = false
+            end
+        end)
+    end
+end))
+
+catatKoneksi(UserInputService.InputChanged:Connect(function(input)
+    if not sedangTahanIkon then return end
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        local selisih = input.Position - posisiInputAwal
+        -- Anggap sebagai geser (drag) jika jari/mouse bergerak lebih dari 6 pixel
+        if selisih.Magnitude > 6 then
+            ikonBaruDigeser = true
+            Status.PosisiIkonKustom = true
+        end
+
+        if ikonBaruDigeser then
+            local kamera = ambilKamera()
+            local ukuranLayar = kamera and kamera.ViewportSize or Vector2.new(1280, 720)
+            local lebarTombol = TombolIkonEmote.Size.X.Offset
+            local tinggiTombol = TombolIkonEmote.Size.Y.Offset
+
+            local baruX = math.clamp(posisiTombolAwal.X.Offset + selisih.X, 6, math.max(6, ukuranLayar.X - lebarTombol - 6))
+            local baruY = math.clamp(posisiTombolAwal.Y.Offset + selisih.Y, 6, math.max(6, ukuranLayar.Y - tinggiTombol - 6))
+            TombolIkonEmote.Position = UDim2.new(0, baruX, 0, baruY)
+        end
+    end
+end))
+
+-- ============================================================
+-- 13. PEMBARUAN TAMPILAN WHEEL & FILTER PENCARIAN (RINGAN 60K+)
+-- ============================================================
+local function perbaruiTampilanBintang()
+    if Status.ModeTampilan == "Favorit" then
+        LabelBintang.Text = "UNFAV"
+        if Status.ModeBintang then
+            TombolBintang.BackgroundColor3 = WARNA.Bahaya
+            TombolBintang.TextColor3 = WARNA.TeksUtama
+            GarisTombolBintang.Color = WARNA.Bahaya
+            GarisWheel.Color = WARNA.Bahaya
+            LabelModeTengah.Text = "★ KLIK UTK UNFAV"
+            LabelModeTengah.TextColor3 = WARNA.Bahaya
         else
-            StarBtn.BackgroundColor3 = COLORS.PanelBg
-            StarBtn.TextColor3 = COLORS.TextSecondary
-            StarBtnStroke.Color = COLORS.PanelStroke
-            WheelStroke.Color = COLORS.Gold
-            CenterModeLbl.Text = "★ FAVORITES"
-            CenterModeLbl.TextColor3 = COLORS.Gold
+            TombolBintang.BackgroundColor3 = WARNA.LatarPanel
+            TombolBintang.TextColor3 = WARNA.TeksSekunder
+            GarisTombolBintang.Color = WARNA.GarisPanel
+            GarisWheel.Color = WARNA.Emas
+            LabelModeTengah.Text = "★ FAVORIT"
+            LabelModeTengah.TextColor3 = WARNA.Emas
         end
     else
-        StarCaption.Text = "FAVORIT"
-        if State.StarMode then
-            StarBtn.BackgroundColor3 = COLORS.Gold
-            StarBtn.TextColor3 = Color3.fromRGB(20, 20, 24)
-            StarBtnStroke.Color = COLORS.Gold
-            WheelStroke.Color = COLORS.Gold
-            CenterModeLbl.Text = "★ TAP TO FAV"
-            CenterModeLbl.TextColor3 = COLORS.Gold
+        LabelBintang.Text = "FAVORIT"
+        if Status.ModeBintang then
+            TombolBintang.BackgroundColor3 = WARNA.Emas
+            TombolBintang.TextColor3 = Color3.fromRGB(20, 20, 24)
+            GarisTombolBintang.Color = WARNA.Emas
+            GarisWheel.Color = WARNA.Emas
+            LabelModeTengah.Text = "★ KLIK UTK FAV"
+            LabelModeTengah.TextColor3 = WARNA.Emas
         else
-            StarBtn.BackgroundColor3 = COLORS.PanelBg
-            StarBtn.TextColor3 = COLORS.TextSecondary
-            StarBtnStroke.Color = COLORS.PanelStroke
-            WheelStroke.Color = COLORS.WheelStroke
-            CenterModeLbl.Text = "ALL EMOTES"
-            CenterModeLbl.TextColor3 = COLORS.Accent
+            TombolBintang.BackgroundColor3 = WARNA.LatarPanel
+            TombolBintang.TextColor3 = WARNA.TeksSekunder
+            GarisTombolBintang.Color = WARNA.GarisPanel
+            GarisWheel.Color = WARNA.GarisWheel
+            LabelModeTengah.Text = "SEMUA EMOTE"
+            LabelModeTengah.TextColor3 = WARNA.Aksen
         end
     end
 end
 
-local function updateFavViewButton()
-    if State.ViewMode == "Favorites" then
-        FavViewBtn.Text = "←  All Emotes (" .. tostring(#State.AllEmotes) .. ")"
-        FavViewBtn.TextColor3 = COLORS.Accent
-        FavViewStroke.Color = COLORS.Accent
+local function perbaruiTombolDaftarFav()
+    if Status.ModeTampilan == "Favorit" then
+        TombolDaftarFav.Text = "←  Semua Emote (" .. formatAngka(#Status.SemuaEmote) .. ")"
+        TombolDaftarFav.TextColor3 = WARNA.Aksen
+        GarisDaftarFav.Color = WARNA.Aksen
     else
-        FavViewBtn.Text = "★  Favorites (" .. tostring(#State.Favorites) .. ")"
-        FavViewBtn.TextColor3 = COLORS.Gold
-        FavViewStroke.Color = COLORS.Gold
+        TombolDaftarFav.Text = "★  Favorit (" .. formatAngka(#Status.DaftarFavorit) .. ")"
+        TombolDaftarFav.TextColor3 = WARNA.Emas
+        GarisDaftarFav.Color = WARNA.Emas
     end
 end
 
-local function updateCenterDisplay(emoteItem)
-    if emoteItem then
-        CenterEmoteName.Text = emoteItem.name
-        CenterEmoteName.TextColor3 = COLORS.TextPrimary
+local function perbaruiTampilanTengah(itemEmote)
+    if itemEmote then
+        LabelNamaTengah.Text = itemEmote.name
+        LabelNamaTengah.TextColor3 = WARNA.TeksUtama
     else
-        if State.ViewMode == "Favorites" and #State.Favorites == 0 then
-            CenterEmoteName.Text = "Belum ada Favorit"
-            CenterEmoteName.TextColor3 = COLORS.TextMuted
-        elseif #State.FilteredList == 0 then
-            CenterEmoteName.Text = "Tidak ditemukan"
-            CenterEmoteName.TextColor3 = COLORS.TextMuted
+        if Status.ModeTampilan == "Favorit" and #Status.DaftarFavorit == 0 then
+            LabelNamaTengah.Text = "Belum ada Favorit"
+            LabelNamaTengah.TextColor3 = WARNA.TeksRedup
+        elseif #Status.DaftarTampil == 0 then
+            LabelNamaTengah.Text = "Tidak ditemukan"
+            LabelNamaTengah.TextColor3 = WARNA.TeksRedup
         else
-            CenterEmoteName.Text = "Pilih Emote"
-            CenterEmoteName.TextColor3 = COLORS.TextSecondary
+            LabelNamaTengah.Text = "Pilih Emote"
+            LabelNamaTengah.TextColor3 = WARNA.TeksSekunder
         end
     end
 end
 
-local function renderWheelPage()
-    local totalItems = #State.FilteredList
-    State.TotalPages = math.max(1, math.ceil(totalItems / SLOTS_PER_PAGE))
-    State.CurrentPage = math.clamp(State.CurrentPage, 1, State.TotalPages)
+local function gambarHalamanWheel()
+    local totalItem = #Status.DaftarTampil
+    Status.TotalHalaman = math.max(1, math.ceil(totalItem / SLOT_PER_HALAMAN))
+    Status.HalamanSekarang = math.clamp(Status.HalamanSekarang, 1, Status.TotalHalaman)
 
-    PageLabel.Text = tostring(State.CurrentPage) .. " / " .. tostring(State.TotalPages)
-    PrevBtn.TextTransparency = (State.CurrentPage <= 1) and 0.6 or 0
-    NextBtn.TextTransparency = (State.CurrentPage >= State.TotalPages) and 0.6 or 0
+    LabelHalaman.Text = formatAngka(Status.HalamanSekarang) .. " / " .. formatAngka(Status.TotalHalaman)
 
-    local startIdx = (State.CurrentPage - 1) * SLOTS_PER_PAGE
+    local bisaSebelumnya = Status.HalamanSekarang > 1
+    local bisaBerikutnya = Status.HalamanSekarang < Status.TotalHalaman
+    TombolSebelumnya.TextTransparency = bisaSebelumnya and 0 or 0.65
+    GarisSebelumnya.Transparency = bisaSebelumnya and 0.15 or 0.65
+    TombolBerikutnya.TextTransparency = bisaBerikutnya and 0 or 0.65
+    GarisBerikutnya.Transparency = bisaBerikutnya and 0.15 or 0.65
 
-    for i = 1, SLOTS_PER_PAGE do
-        local slot = SlotButtons[i]
-        local item = State.FilteredList[startIdx + i]
-        slot.Emote = item
+    local indeksAwal = (Status.HalamanSekarang - 1) * SLOT_PER_HALAMAN
+
+    for i = 1, SLOT_PER_HALAMAN do
+        local slot = DaftarTombolSlot[i]
+        local item = Status.DaftarTampil[indeksAwal + i]
+        slot.DataEmote = item
 
         if item then
-            slot.Button.Visible = true
-            slot.Thumb.Image = getThumbnailUrl(item.id)
-            slot.NameLbl.Text = item.name
-            slot.FavBadge.Visible = (State.FavoriteSet[item.id] == true)
-            slot.Button.BackgroundColor3 = COLORS.SlotIdle
-            slot.Stroke.Transparency = 1
+            slot.Tombol.Visible = true
+            slot.Thumbnail.Image = buatUrlThumbnail(item.id)
+            slot.LabelNama.Text = item.name
+            slot.LencanaFav.Visible = (Status.SetFavorit[item.id] == true)
+            slot.Tombol.BackgroundColor3 = WARNA.SlotNormal
+            slot.Garis.Transparency = 1
         else
-            slot.Button.Visible = false
-            slot.Thumb.Image = ""
-            slot.NameLbl.Text = ""
-            slot.FavBadge.Visible = false
+            slot.Tombol.Visible = false
+            slot.Thumbnail.Image = ""
+            slot.LabelNama.Text = ""
+            slot.LencanaFav.Visible = false
         end
     end
 
-    HoveredSlotIdx = nil
-    updateStarVisuals()
-    updateFavViewButton()
-    updateCenterDisplay(nil)
+    IndeksSlotHover = nil
+    perbaruiTampilanBintang()
+    perbaruiTombolDaftarFav()
+    perbaruiTampilanTengah(nil)
 end
 
-local function rebuildFilteredList(resetPage)
-    local source = (State.ViewMode == "Favorites") and State.Favorites or State.AllEmotes
-    local query = string.lower(string.gsub(State.SearchQuery or "", "^%s*(.-)%s*$", "%1"))
+-- Bangun ulang daftar emote sesuai kata kunci pencarian / mode tampilan
+local function bangunUlangDaftarTampil(resetHalaman)
+    local sumber = (Status.ModeTampilan == "Favorit") and Status.DaftarFavorit or Status.SemuaEmote
+    local kataKunci = string.lower(string.gsub(Status.KataKunciCari or "", "^%s*(.-)%s*$", "%1"))
 
-    local result = {}
-    if query == "" then
-        for _, item in ipairs(source) do
-            table.insert(result, item)
+    if kataKunci == "" then
+        -- Referensi langsung tanpa menyalin 62.000+ tabel (super cepat / O(1))
+        Status.DaftarTampil = sumber
+        if resetHalaman then
+            Status.HalamanSekarang = 1
         end
-    else
-        local seen = {}
-        local numericId = tonumber(query)
-        if numericId and math.floor(numericId) == numericId and numericId > 0 and State.ViewMode == "All" then
-            local matchedName = State.IdLookupCache[numericId]
-            for _, item in ipairs(source) do
-                if item.id == numericId then
-                    matchedName = item.name
+        gambarHalamanWheel()
+        return
+    end
+
+    local hasil = {}
+    local sudahAda = {}
+
+    -- Jika user mengetik angka Asset ID secara langsung, tampilkan langsung di Slot 1
+    local idAngka = tonumber(kataKunci)
+    if idAngka and math.floor(idAngka) == idAngka and idAngka > 0 and Status.ModeTampilan == "Semua" then
+        local namaKetemu = Status.CacheNamaId[idAngka]
+        if not namaKetemu then
+            for idx = 1, #sumber do
+                if sumber[idx].id == idAngka then
+                    namaKetemu = sumber[idx].name
                     break
                 end
             end
+        end
 
-            seen[numericId] = true
-            table.insert(result, {
-                id   = numericId,
-                name = matchedName or ("Emote #" .. tostring(numericId)),
-            })
+        sudahAda[idAngka] = true
+        hasil[#hasil + 1] = {
+            id   = idAngka,
+            name = namaKetemu or ("Emote #" .. tostring(idAngka)),
+            l    = string.lower(namaKetemu or tostring(idAngka)),
+        }
 
-            if not matchedName then
-                task.spawn(function()
-                    local ok, info = pcall(MarketplaceService.GetProductInfo, MarketplaceService, numericId)
-                    if ok and type(info) == "table" and info.Name then
-                        State.IdLookupCache[numericId] = info.Name
-                        if not State.IsDestroyed and tonumber(State.SearchQuery) == numericId then
-                            rebuildFilteredList(false)
+        -- Ambil nama asli dari Marketplace secara asynchronous jika belum ada di cache
+        if not namaKetemu then
+            task.spawn(function()
+                local ok, info = pcall(MarketplaceService.GetProductInfo, MarketplaceService, idAngka)
+                if ok and type(info) == "table" and info.Name then
+                    Status.CacheNamaId[idAngka] = info.Name
+                    if not Status.SudahDihancurkan and tonumber(Status.KataKunciCari) == idAngka then
+                        bangunUlangDaftarTampil(false)
+                    end
+                end
+            end)
+        end
+    end
+
+    -- Prioritaskan hasil pencarian live Marketplace jika cocok dengan kata kunci saat ini
+    if Status.ModeTampilan == "Semua" and Status.KataKunciLive == kataKunci and #Status.HasilCariLive > 0 then
+        for idx = 1, #Status.HasilCariLive do
+            local item = Status.HasilCariLive[idx]
+            if not sudahAda[item.id] then
+                sudahAda[item.id] = true
+                hasil[#hasil + 1] = item
+            end
+        end
+    end
+
+    -- Tahap 1: Pencarian substring cepat pada nama emote (huruf kecil)
+    local batasHasil = 400
+    for idx = 1, #sumber do
+        local item = sumber[idx]
+        if not sudahAda[item.id] then
+            if string.find(item.l, kataKunci, 1, true)
+                or (idAngka and string.find(tostring(item.id), kataKunci, 1, true))
+            then
+                sudahAda[item.id] = true
+                hasil[#hasil + 1] = item
+                if #hasil >= batasHasil then break end
+            end
+        end
+    end
+
+    -- Tahap 2: Pencarian cerdas per-kata jika hasil sedikit (contoh: "i got that feelin" -> "Got that feelin'")
+    if #hasil < 16 and not idAngka then
+        local daftarKata = {}
+        for kata in string.gmatch(kataKunci, "%w+") do
+            if #kata >= 2 then
+                daftarKata[#daftarKata + 1] = kata
+            end
+        end
+        if #daftarKata >= 2 then
+            local minimalCocok = math.max(2, #daftarKata - 1)
+            for idx = 1, #sumber do
+                local item = sumber[idx]
+                if not sudahAda[item.id] then
+                    local cocok = 0
+                    for wi = 1, #daftarKata do
+                        if string.find(item.l, daftarKata[wi], 1, true) then
+                            cocok = cocok + 1
                         end
                     end
-                end)
-            end
-        end
-
-        if State.ViewMode == "All" and State.LiveSearchQuery == query and #State.LiveSearchResults > 0 then
-            for _, item in ipairs(State.LiveSearchResults) do
-                if not seen[item.id] then
-                    seen[item.id] = true
-                    table.insert(result, item)
-                end
-            end
-        end
-
-        for _, item in ipairs(source) do
-            if not seen[item.id] then
-                if string.find(string.lower(item.name), query, 1, true)
-                    or string.find(tostring(item.id), query, 1, true)
-                then
-                    seen[item.id] = true
-                    table.insert(result, item)
+                    if cocok >= minimalCocok then
+                        sudahAda[item.id] = true
+                        hasil[#hasil + 1] = item
+                        if #hasil >= 120 then break end
+                    end
                 end
             end
         end
     end
 
-    State.FilteredList = result
-    if resetPage then
-        State.CurrentPage = 1
+    Status.DaftarTampil = hasil
+    if resetHalaman then
+        Status.HalamanSekarang = 1
     end
-    renderWheelPage()
+    gambarHalamanWheel()
 end
 
 -- ============================================================
--- 13. OPEN / CLOSE WHEEL
+-- 14. BUKA / TUTUP RODA EMOTE
 -- ============================================================
-local function setWheelOpen(open)
-    if State.IsDestroyed then return end
-    State.IsOpen = open
-    WheelRoot.Visible = open
+local function aturBukaWheel(buka)
+    if Status.SudahDihancurkan then return end
+    Status.Terbuka = buka
+    WadahWheel.Visible = buka
 
-    if open then
-        disableDefaultEmotes()
-        TopbarStroke.Color = COLORS.Accent
-        TopbarStroke.Transparency = 0.05
-        SmileyLabel.TextColor3 = COLORS.Accent
-        rebuildFilteredList(false)
+    if buka then
+        matikanEmoteBawaan()
+        GarisIkonEmote.Color = WARNA.Aksen
+        GarisIkonEmote.Transparency = 0.05
+        LabelSenyum.TextColor3 = WARNA.Aksen
+        bangunUlangDaftarTampil(false)
     else
-        TopbarStroke.Color = Color3.fromRGB(95, 100, 118)
-        TopbarStroke.Transparency = 0.35
-        SmileyLabel.TextColor3 = COLORS.TextPrimary
-        if State.StarMode then
-            State.StarMode = false
-            updateStarVisuals()
+        GarisIkonEmote.Color = Color3.fromRGB(95, 100, 118)
+        GarisIkonEmote.Transparency = 0.35
+        LabelSenyum.TextColor3 = WARNA.TeksUtama
+        if Status.ModeBintang then
+            Status.ModeBintang = false
+            perbaruiTampilanBintang()
         end
     end
 end
 
 -- ============================================================
--- 14. INTERACTION HANDLERS
+-- 15. PENANGANAN INTERAKSI TOMBOL, KEYBOARD, & SLOT
 -- ============================================================
-trackConn(TopbarBtn.MouseButton1Click:Connect(function()
-    setWheelOpen(not State.IsOpen)
+-- Klik tombol ikon senyum (diabaikan jika barusan di-drag/digeser)
+catatKoneksi(TombolIkonEmote.MouseButton1Click:Connect(function()
+    if ikonBaruDigeser then
+        ikonBaruDigeser = false
+        return
+    end
+    aturBukaWheel(not Status.Terbuka)
 end))
 
-trackConn(UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
+-- Pintasan keyboard: titik "." untuk buka/tutup, Escape untuk menutup
+catatKoneksi(UserInputService.InputBegan:Connect(function(input, sedangKetik)
+    if sedangKetik then return end
     if input.KeyCode == Enum.KeyCode.Period then
-        setWheelOpen(not State.IsOpen)
-    elseif input.KeyCode == Enum.KeyCode.Escape and State.IsOpen then
-        setWheelOpen(false)
+        aturBukaWheel(not Status.Terbuka)
+    elseif input.KeyCode == Enum.KeyCode.Escape and Status.Terbuka then
+        aturBukaWheel(false)
     end
 end))
 
-trackConn(WheelCircle.InputChanged:Connect(function(input)
-    if not State.IsOpen then return end
+-- Scroll mouse di atas roda emote untuk berpindah halaman (PC)
+catatKoneksi(LingkaranWheel.InputChanged:Connect(function(input)
+    if not Status.Terbuka then return end
     if input.UserInputType == Enum.UserInputType.MouseWheel then
-        if input.Position.Z > 0 and State.CurrentPage > 1 then
-            State.CurrentPage = State.CurrentPage - 1
-            renderWheelPage()
-        elseif input.Position.Z < 0 and State.CurrentPage < State.TotalPages then
-            State.CurrentPage = State.CurrentPage + 1
-            renderWheelPage()
+        if input.Position.Z > 0 and Status.HalamanSekarang > 1 then
+            Status.HalamanSekarang = Status.HalamanSekarang - 1
+            gambarHalamanWheel()
+        elseif input.Position.Z < 0 and Status.HalamanSekarang < Status.TotalHalaman then
+            Status.HalamanSekarang = Status.HalamanSekarang + 1
+            gambarHalamanWheel()
         end
     end
 end))
 
-trackConn(PrevBtn.MouseButton1Click:Connect(function()
-    if State.CurrentPage > 1 then
-        State.CurrentPage = State.CurrentPage - 1
-        renderWheelPage()
+-- Tombol navigasi halaman < (kiri tombol Favorit)
+catatKoneksi(TombolSebelumnya.MouseEnter:Connect(function()
+    if Status.HalamanSekarang > 1 then
+        TombolSebelumnya.BackgroundColor3 = WARNA.TombolNavHover
+        GarisSebelumnya.Color = WARNA.Aksen
+    end
+end))
+catatKoneksi(TombolSebelumnya.MouseLeave:Connect(function()
+    TombolSebelumnya.BackgroundColor3 = WARNA.TombolNav
+    GarisSebelumnya.Color = WARNA.GarisPanel
+end))
+catatKoneksi(TombolSebelumnya.MouseButton1Click:Connect(function()
+    if Status.HalamanSekarang > 1 then
+        Status.HalamanSekarang = Status.HalamanSekarang - 1
+        gambarHalamanWheel()
     end
 end))
 
-trackConn(NextBtn.MouseButton1Click:Connect(function()
-    if State.CurrentPage < State.TotalPages then
-        State.CurrentPage = State.CurrentPage + 1
-        renderWheelPage()
+-- Tombol navigasi halaman > (kanan tombol Favorit)
+catatKoneksi(TombolBerikutnya.MouseEnter:Connect(function()
+    if Status.HalamanSekarang < Status.TotalHalaman then
+        TombolBerikutnya.BackgroundColor3 = WARNA.TombolNavHover
+        GarisBerikutnya.Color = WARNA.Aksen
+    end
+end))
+catatKoneksi(TombolBerikutnya.MouseLeave:Connect(function()
+    TombolBerikutnya.BackgroundColor3 = WARNA.TombolNav
+    GarisBerikutnya.Color = WARNA.GarisPanel
+end))
+catatKoneksi(TombolBerikutnya.MouseButton1Click:Connect(function()
+    if Status.HalamanSekarang < Status.TotalHalaman then
+        Status.HalamanSekarang = Status.HalamanSekarang + 1
+        gambarHalamanWheel()
     end
 end))
 
-local function applySpeedFromBox()
-    local clamped = clampSpeed(SpeedBox.Text)
-    State.Speed = clamped
-    SpeedBox.Text = formatSpeed(clamped)
-    if State.CurrentTrack then
+-- Terapkan kecepatan dari kotak input (dan ubah kecepatan emote yang sedang berjalan)
+local function terapkanKecepatanDariInput()
+    local hasil = batasiKecepatan(KotakKecepatan.Text)
+    Status.Kecepatan = hasil
+    KotakKecepatan.Text = formatKecepatan(hasil)
+    if Status.TrackAktif then
         pcall(function()
-            State.CurrentTrack:AdjustSpeed(State.Speed)
+            Status.TrackAktif:AdjustSpeed(Status.Kecepatan)
         end)
     end
 end
 
-trackConn(SpeedBox.FocusLost:Connect(function()
-    applySpeedFromBox()
+catatKoneksi(KotakKecepatan.FocusLost:Connect(function()
+    terapkanKecepatanDariInput()
 end))
 
-trackConn(StarBtn.MouseButton1Click:Connect(function()
-    State.StarMode = not State.StarMode
-    updateStarVisuals()
-    if State.StarMode then
-        if State.ViewMode == "Favorites" then
-            showToast("Mode Unfav aktif — klik emote untuk menghapus dari Favorit.", COLORS.Danger)
+-- Tombol Bintang ★ (Mode Tambah Favorit di Semua Emote / Mode Unfav di Daftar Favorit)
+catatKoneksi(TombolBintang.MouseButton1Click:Connect(function()
+    Status.ModeBintang = not Status.ModeBintang
+    perbaruiTampilanBintang()
+    if Status.ModeBintang then
+        if Status.ModeTampilan == "Favorit" then
+            tampilkanNotif("Mode Unfav aktif — klik emote untuk menghapus dari Favorit.", WARNA.Bahaya)
         else
-            showToast("Mode Favorit aktif — klik emote yang ingin difavoritkan.", COLORS.Gold)
+            tampilkanNotif("Mode Favorit aktif — klik emote yang ingin difavoritkan.", WARNA.Emas)
         end
     end
 end))
 
-trackConn(FavViewBtn.MouseButton1Click:Connect(function()
-    State.StarMode = false
-    if State.ViewMode == "All" then
-        State.ViewMode = "Favorites"
+-- Tombol Bawah: Beralih antara Semua Emote dan Daftar Favorit
+catatKoneksi(TombolDaftarFav.MouseButton1Click:Connect(function()
+    Status.ModeBintang = false -- Matikan mode bintang otomatis agar tidak salah klik unfav
+    if Status.ModeTampilan == "Semua" then
+        Status.ModeTampilan = "Favorit"
     else
-        State.ViewMode = "All"
+        Status.ModeTampilan = "Semua"
     end
-    rebuildFilteredList(true)
+    bangunUlangDaftarTampil(true)
 end))
 
--- Live Catalog Keyword Search (searches ALL tens of thousands of Marketplace emotes directly)
-local function searchCatalogLive(keyword, reqId)
-    local normQuery = string.lower(string.gsub(keyword or "", "^%s*(.-)%s*$", "%1"))
-    if #normQuery < 2 then return end
+-- Pencarian live ke Marketplace Roblox (untuk menemukan emote terbaru yang belum masuk cache)
+local function cariLiveMarketplace(kataKunci, idPermintaan)
+    local kataNormal = string.lower(string.gsub(kataKunci or "", "^%s*(.-)%s*$", "%1"))
+    if #kataNormal < 2 then return end
 
-    if not State.IsDestroyed and State.SearchRequestId == reqId then
-        StatusLabel.Text = 'Mencari "' .. keyword .. '" di Marketplace...'
-    end
+    local daftarKetemu = {}
+    local setKetemu = {}
 
-    local encoded = HttpService:UrlEncode(keyword)
-    local endpoints = {
-        "https://catalog.roblox.com/v1/search/items/details?Category=12&Subcategory=39&Limit=30&Keyword=" .. encoded,
-        "https://catalog.roproxy.com/v1/search/items/details?Category=12&Subcategory=39&Limit=30&Keyword=" .. encoded,
-    }
+    -- Metode A: AvatarEditorService bawaan Roblox (menggunakan Enum.AvatarAssetType.EmoteAnimation)
+    pcall(function()
+        local param = CatalogSearchParams.new()
+        param.AssetTypes = { Enum.AvatarAssetType.EmoteAnimation }
+        param.SalesTypeFilter = Enum.SalesTypeFilter.All
+        param.IncludeOffSale = true
+        param.SearchKeyword = kataKunci
+        param.Limit = 30
 
-    local foundList = {}
-    local foundSet = {}
-    local success = false
-
-    for _, baseUrl in ipairs(endpoints) do
-        local data = httpGetCatalogJson(baseUrl)
-        if data and type(data.data) == "table" then
-            success = true
-            local cursor = data.nextPageCursor
-            for _, item in ipairs(data.data) do
-                local id = tonumber(item.id)
-                local name = tostring(item.name or ("Emote #" .. tostring(id)))
-                if id and not foundSet[id] then
-                    foundSet[id] = true
-                    table.insert(foundList, { id = id, name = name })
-                    addEmoteToAll(id, name)
-                end
-            end
-
-            local extraPages = 0
-            while cursor and cursor ~= "" and extraPages < 2 and not State.IsDestroyed and State.SearchRequestId == reqId do
-                task.wait(0.15)
-                local nextData = httpGetCatalogJson(baseUrl .. "&Cursor=" .. HttpService:UrlEncode(cursor))
-                if not nextData or type(nextData.data) ~= "table" then break end
-                for _, item in ipairs(nextData.data) do
-                    local id = tonumber(item.id)
-                    local name = tostring(item.name or ("Emote #" .. tostring(id)))
-                    if id and not foundSet[id] then
-                        foundSet[id] = true
-                        table.insert(foundList, { id = id, name = name })
-                        addEmoteToAll(id, name)
+        local halaman = AvatarEditorService:SearchCatalog(param)
+        if halaman then
+            local isiHalaman = halaman:GetCurrentPage()
+            if type(isiHalaman) == "table" then
+                for _, item in ipairs(isiHalaman) do
+                    local id = tonumber(item.Id)
+                    local nama = tostring(item.Name or ("Emote #" .. tostring(id)))
+                    if id and not setKetemu[id] then
+                        setKetemu[id] = true
+                        daftarKetemu[#daftarKetemu + 1] = {
+                            id   = id,
+                            name = nama,
+                            l    = string.lower(nama),
+                        }
+                        tambahEmoteKeDaftar(id, nama)
                     end
                 end
-                cursor = nextData.nextPageCursor
-                extraPages = extraPages + 1
             end
+        end
+    end)
+
+    -- Metode B: Cadangan Catalog HTTP API jika metode A kosong
+    if #daftarKetemu == 0 then
+        local terencode = HttpService:UrlEncode(kataKunci)
+        local daftarUrl = {
+            "https://catalog.roproxy.com/v1/search/items/details?Category=12&Subcategory=39&Limit=30&Keyword=" .. terencode,
+            "https://catalog.roblox.com/v1/search/items/details?Category=12&Subcategory=39&Limit=30&Keyword=" .. terencode,
+        }
+        for _, url in ipairs(daftarUrl) do
+            local daftar = ambilDataKatalogHttp(url)
+            if daftar and #daftar > 0 then
+                for _, item in ipairs(daftar) do
+                    local id = tonumber(item.id)
+                    local nama = tostring(item.name or ("Emote #" .. tostring(id)))
+                    if id and not setKetemu[id] then
+                        setKetemu[id] = true
+                        daftarKetemu[#daftarKetemu + 1] = {
+                            id   = id,
+                            name = nama,
+                            l    = string.lower(nama),
+                        }
+                        tambahEmoteKeDaftar(id, nama)
+                    end
+                end
+                break
+            end
+        end
+    end
+
+    if not Status.SudahDihancurkan and Status.IdPermintaanCari == idPermintaan and #daftarKetemu > 0 then
+        Status.KataKunciLive = kataNormal
+        Status.HasilCariLive = daftarKetemu
+        LabelStatus.Text = formatAngka(#Status.SemuaEmote) .. " Emote tersedia"
+        bangunUlangDaftarTampil(true)
+    end
+end
+
+-- Event saat user mengetik di kotak pencarian
+catatKoneksi(KotakCari:GetPropertyChangedSignal("Text"):Connect(function()
+    local teks = KotakCari.Text
+    Status.KataKunciCari = teks
+    TombolHapusCari.Visible = (#teks > 0)
+
+    if teks == "" then
+        Status.KataKunciLive = ""
+        Status.HasilCariLive = {}
+        bangunUlangDaftarTampil(true)
+        return
+    end
+
+    -- Debounce ringan 0.08 detik agar mengetik tetap mulus 60 FPS di HP
+    Status.IdDebounceCari = Status.IdDebounceCari + 1
+    local idDebounceIni = Status.IdDebounceCari
+    task.delay(0.08, function()
+        if not Status.SudahDihancurkan and Status.IdDebounceCari == idDebounceIni then
+            bangunUlangDaftarTampil(true)
+        end
+    end)
+
+    -- Pencarian live Marketplace setelah berhenti mengetik 0.45 detik (minimal 2 huruf)
+    local teksRapih = string.gsub(teks, "^%s*(.-)%s*$", "%1")
+    if Status.ModeTampilan == "Semua" and #teksRapih >= 2 and not tonumber(teksRapih) then
+        Status.IdPermintaanCari = Status.IdPermintaanCari + 1
+        local idPermintaanIni = Status.IdPermintaanCari
+        task.delay(0.45, function()
+            if not Status.SudahDihancurkan and Status.IdPermintaanCari == idPermintaanIni then
+                cariLiveMarketplace(teksRapih, idPermintaanIni)
+            end
+        end)
+    end
+end))
+
+catatKoneksi(TombolHapusCari.MouseButton1Click:Connect(function()
+    KotakCari.Text = ""
+end))
+
+-- Event hover & klik untuk ke-8 slot pada roda emote
+for i = 1, SLOT_PER_HALAMAN do
+    local slot = DaftarTombolSlot[i]
+
+    catatKoneksi(slot.Tombol.MouseEnter:Connect(function()
+        if not slot.DataEmote then return end
+        IndeksSlotHover = i
+        if Status.ModeBintang then
+            if Status.ModeTampilan == "Favorit" then
+                slot.Tombol.BackgroundColor3 = WARNA.SlotModeUnfav
+                slot.Garis.Color = WARNA.Bahaya
+            else
+                slot.Tombol.BackgroundColor3 = WARNA.SlotModeFav
+                slot.Garis.Color = WARNA.Emas
+            end
+        else
+            slot.Tombol.BackgroundColor3 = WARNA.SlotHover
+            slot.Garis.Color = WARNA.Aksen
+        end
+        slot.Garis.Transparency = 0.1
+        perbaruiTampilanTengah(slot.DataEmote)
+    end))
+
+    catatKoneksi(slot.Tombol.MouseLeave:Connect(function()
+        slot.Tombol.BackgroundColor3 = WARNA.SlotNormal
+        slot.Garis.Transparency = 1
+        if IndeksSlotHover == i then
+            IndeksSlotHover = nil
+            perbaruiTampilanTengah(nil)
+        end
+    end))
+
+    catatKoneksi(slot.Tombol.MouseButton1Click:Connect(function()
+        local item = slot.DataEmote
+        if not item then return end
+
+        perbaruiTampilanTengah(item)
+
+        if Status.ModeBintang then
+            if Status.ModeTampilan == "Favorit" then
+                -- MODE UNFAV (hanya aktif saat berada di menu Favorit)
+                if Status.SetFavorit[item.id] then
+                    Status.SetFavorit[item.id] = nil
+                    for idx, fav in ipairs(Status.DaftarFavorit) do
+                        if fav.id == item.id then
+                            table.remove(Status.DaftarFavorit, idx)
+                            break
+                        end
+                    end
+                    simpanFavorit()
+                    tampilkanNotif('Emote "' .. item.name .. '" dihapus dari Favorit.', WARNA.Bahaya)
+                    bangunUlangDaftarTampil(false)
+                end
+            else
+                -- MODE TAMBAH FAVORIT (tidak bisa unfav dari menu Semua Emote)
+                if Status.SetFavorit[item.id] then
+                    tampilkanNotif('Emote "' .. item.name .. '" sudah ada di Favorit!', WARNA.Emas)
+                else
+                    Status.SetFavorit[item.id] = true
+                    table.insert(Status.DaftarFavorit, {
+                        id   = item.id,
+                        name = item.name,
+                        l    = string.lower(item.name),
+                    })
+                    simpanFavorit()
+                    slot.LencanaFav.Visible = true
+                    perbaruiTombolDaftarFav()
+                    tampilkanNotif('Emote "' .. item.name .. '" berhasil difavoritkan! ★', WARNA.Sukses)
+                end
+            end
+        else
+            -- Putar emote dengan kecepatan yang diatur lalu tutup wheel
+            terapkanKecepatanDariInput()
+            putarEmote(item)
+            aturBukaWheel(false)
+        end
+    end))
+end
+
+-- ============================================================
+-- 16. PENGAMBILAN KATALOG EMOTE MARKETPLACE OTOMATIS (3 LAPIS)
+-- ============================================================
+-- Lapisan 1: Unduh database JSON Marketplace (62.000+ emote dalam 1 kali unduh)
+local function muatLewatJsonRemote()
+    for _, url in ipairs(URL_JSON_EMOTE_REMOTE) do
+        if Status.SudahDihancurkan then return false end
+        local mentah = ambilTeksHttp(url)
+        if mentah and #mentah > 1000 then
+            local daftar = uraiJsonKatalog(mentah)
+            if daftar and #daftar >= MIN_CACHE_VALID then
+                LabelStatus.Text = "Memproses " .. formatAngka(#daftar) .. " emote Marketplace..."
+                masukkanArrayEmote(daftar, true)
+                simpanCacheMentah(mentah)
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- Lapisan 2: AvatarEditorService bawaan Roblox (tanpa butuh proxy HTTP)
+local function muatLewatAvatarEditorService()
+    local daftarUrutan = {
+        Enum.CatalogSortType.Relevance,
+        Enum.CatalogSortType.BestSelling,
+        Enum.CatalogSortType.MostFavorited,
+        Enum.CatalogSortType.RecentlyCreated,
+    }
+
+    local berhasilDapat = false
+    for _, urutan in ipairs(daftarUrutan) do
+        if Status.SudahDihancurkan then break end
+        pcall(function()
+            local param = CatalogSearchParams.new()
+            param.AssetTypes = { Enum.AvatarAssetType.EmoteAnimation }
+            param.SalesTypeFilter = Enum.SalesTypeFilter.All
+            param.IncludeOffSale = true
+            param.SortType = urutan
+            param.Limit = 30
+
+            local halaman = AvatarEditorService:SearchCatalog(param)
+            local noHal = 0
+            while halaman and noHal < 34 and not Status.SudahDihancurkan do
+                local isi = halaman:GetCurrentPage()
+                if type(isi) == "table" and #isi > 0 then
+                    masukkanArrayEmote(isi, true)
+                    berhasilDapat = true
+                else
+                    break
+                end
+
+                noHal = noHal + 1
+                if noHal == 1 or noHal % 3 == 0 then
+                    if not Status.SudahDihancurkan then
+                        LabelStatus.Text = "Memuat katalog Roblox: " .. formatAngka(#Status.SemuaEmote) .. "..."
+                        if Status.Terbuka and Status.ModeTampilan == "Semua" and Status.KataKunciCari == "" then
+                            bangunUlangDaftarTampil(false)
+                        end
+                    end
+                end
+
+                if halaman.IsFinished then break end
+                local okLanjut = pcall(function()
+                    halaman:AdvanceToNextPageAsync()
+                end)
+                if not okLanjut then break end
+                task.wait(0.18)
+            end
+        end)
+    end
+
+    if berhasilDapat then
+        simpanCacheTabel()
+    end
+    return berhasilDapat
+end
+
+-- Lapisan 3: Cadangan Catalog REST API / RoProxy
+local function muatLewatCatalogApi()
+    local daftarHost = {
+        "https://catalog.roproxy.com/v1/search/items/details?Category=12&Subcategory=39&Limit=30",
+        "https://catalog.roblox.com/v1/search/items/details?Category=12&Subcategory=39&Limit=30",
+    }
+    local daftarSort = { 0, 2, 1, 3 }
+    local hostAktif = nil
+
+    for _, host in ipairs(daftarHost) do
+        local daftar = ambilDataKatalogHttp(host .. "&SortType=0")
+        if daftar and #daftar > 0 then
+            hostAktif = host
             break
         end
     end
 
-    if not success then
-        pcall(function()
-            local params = CatalogSearchParams.new()
-            params.AssetTypes = { Enum.AssetType.EmoteAnimation }
-            params.SearchKeyword = keyword
-            local pages = AvatarEditorService:SearchCatalog(params)
-            if pages then
-                local current = pages:GetCurrentPage()
-                if type(current) == "table" then
-                    for _, item in ipairs(current) do
-                        local id = tonumber(item.Id)
-                        local name = tostring(item.Name or ("Emote #" .. tostring(id)))
-                        if id and not foundSet[id] then
-                            foundSet[id] = true
-                            table.insert(foundList, { id = id, name = name })
-                            addEmoteToAll(id, name)
-                        end
+    if not hostAktif then return false end
+
+    local berhasilDapat = false
+    for _, tipeSort in ipairs(daftarSort) do
+        if Status.SudahDihancurkan then break end
+        local cursor = ""
+        local hal = 0
+        local urlDasar = hostAktif .. "&SortType=" .. tostring(tipeSort)
+
+        while hal < 34 and not Status.SudahDihancurkan do
+            local url = (cursor ~= "") and (urlDasar .. "&Cursor=" .. HttpService:UrlEncode(cursor)) or urlDasar
+            local daftar, nextCursor, kode = ambilDataKatalogHttp(url)
+            if not daftar and kode == 429 then
+                task.wait(1.5)
+                daftar, nextCursor = ambilDataKatalogHttp(url)
+            end
+            if not daftar or #daftar == 0 then break end
+
+            masukkanArrayEmote(daftar, true)
+            berhasilDapat = true
+            hal = hal + 1
+            cursor = nextCursor or ""
+
+            if hal == 1 or hal % 3 == 0 then
+                if not Status.SudahDihancurkan then
+                    LabelStatus.Text = "Memuat Catalog API: " .. formatAngka(#Status.SemuaEmote) .. "..."
+                    if Status.Terbuka and Status.ModeTampilan == "Semua" and Status.KataKunciCari == "" then
+                        bangunUlangDaftarTampil(false)
                     end
                 end
             end
-        end)
+
+            if cursor == "" then break end
+            task.wait(0.2)
+        end
     end
 
-    if #foundList > 0 then
-        saveEmotesCache()
+    if berhasilDapat then
+        simpanCacheTabel()
     end
-
-    if not State.IsDestroyed and State.SearchRequestId == reqId then
-        State.LiveSearchQuery = normQuery
-        State.LiveSearchResults = foundList
-        StatusLabel.Text = tostring(#State.AllEmotes) .. " Emote tersedia"
-        rebuildFilteredList(true)
-    end
+    return berhasilDapat
 end
 
-trackConn(SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-    local text = SearchBox.Text
-    State.SearchQuery = text
-    ClearSearchBtn.Visible = (#text > 0)
-    if text == "" then
-        State.LiveSearchQuery = ""
-        State.LiveSearchResults = {}
-    end
-    rebuildFilteredList(true)
-
-    local trimmed = string.gsub(text, "^%s*(.-)%s*$", "%1")
-    if State.ViewMode == "All" and #trimmed >= 2 and not tonumber(trimmed) then
-        State.SearchRequestId = State.SearchRequestId + 1
-        local myReqId = State.SearchRequestId
-        task.delay(0.35, function()
-            if not State.IsDestroyed and State.SearchRequestId == myReqId then
-                searchCatalogLive(trimmed, myReqId)
-            end
-        end)
-    end
-end))
-
-trackConn(ClearSearchBtn.MouseButton1Click:Connect(function()
-    SearchBox.Text = ""
-end))
-
-for i = 1, SLOTS_PER_PAGE do
-    local slot = SlotButtons[i]
-
-    trackConn(slot.Button.MouseEnter:Connect(function()
-        if not slot.Emote then return end
-        HoveredSlotIdx = i
-        if State.StarMode then
-            if State.ViewMode == "Favorites" then
-                slot.Button.BackgroundColor3 = COLORS.SlotUnfavMode
-                slot.Stroke.Color = COLORS.Danger
-            else
-                slot.Button.BackgroundColor3 = COLORS.SlotFavMode
-                slot.Stroke.Color = COLORS.Gold
-            end
-        else
-            slot.Button.BackgroundColor3 = COLORS.SlotHover
-            slot.Stroke.Color = COLORS.Accent
-        end
-        slot.Stroke.Transparency = 0.1
-        updateCenterDisplay(slot.Emote)
-    end))
-
-    trackConn(slot.Button.MouseLeave:Connect(function()
-        slot.Button.BackgroundColor3 = COLORS.SlotIdle
-        slot.Stroke.Transparency = 1
-        if HoveredSlotIdx == i then
-            HoveredSlotIdx = nil
-            updateCenterDisplay(nil)
-        end
-    end))
-
-    trackConn(slot.Button.MouseButton1Click:Connect(function()
-        local item = slot.Emote
-        if not item then return end
-
-        updateCenterDisplay(item)
-
-        if State.StarMode then
-            if State.ViewMode == "Favorites" then
-                if State.FavoriteSet[item.id] then
-                    State.FavoriteSet[item.id] = nil
-                    for idx, fav in ipairs(State.Favorites) do
-                        if fav.id == item.id then
-                            table.remove(State.Favorites, idx)
-                            break
-                        end
-                    end
-                    saveFavorites()
-                    showToast('Emote "' .. item.name .. '" dihapus dari Favorit.', COLORS.Danger)
-                    rebuildFilteredList(false)
-                end
-            else
-                if State.FavoriteSet[item.id] then
-                    showToast('Emote "' .. item.name .. '" sudah ada di Favorit!', COLORS.Gold)
-                else
-                    State.FavoriteSet[item.id] = true
-                    table.insert(State.Favorites, { id = item.id, name = item.name })
-                    saveFavorites()
-                    slot.FavBadge.Visible = true
-                    updateFavViewButton()
-                    showToast('Emote "' .. item.name .. '" berhasil difavoritkan! ★', COLORS.Success)
-                end
-            end
-        else
-            applySpeedFromBox()
-            playEmote(item)
-            setWheelOpen(false)
-        end
-    end))
-end
-
--- ============================================================
--- 15. AUTOMATIC ROBLOX MARKETPLACE EMOTE FETCHER
--- ============================================================
-local function fetchMarketplaceEmotesAsync()
-    if State.IsFetchingCatalog then return end
-    State.IsFetchingCatalog = true
+-- Jalankan pengambilan katalog di latar belakang secara otomatis
+local function muatKatalogMarketplaceAsync()
+    if Status.SedangMuatKatalog then return end
+    Status.SedangMuatKatalog = true
 
     task.spawn(function()
-        local baseHosts = {
-            "https://catalog.roblox.com/v1/search/items/details?Category=12&Subcategory=39&Limit=30",
-            "https://catalog.roproxy.com/v1/search/items/details?Category=12&Subcategory=39&Limit=30",
-        }
-        local sortTypes = { 0, 2, 1, 3 } -- Relevance, BestSelling, MostFavorited, RecentlyUpdated
-        local maxPagesPerSort = 34
-
-        local workingHost = nil
-        local fetchedFromApi = false
-
-        StatusLabel.Text = "Memuat katalog emote Marketplace..."
-
-        for _, host in ipairs(baseHosts) do
-            local data = httpGetCatalogJson(host .. "&SortType=0")
-            if data and type(data.data) == "table" and #data.data > 0 then
-                workingHost = host
-                break
-            end
+        if not Status.SudahDihancurkan then
+            LabelStatus.Text = "Mengunduh database emote Marketplace..."
         end
 
-        if workingHost then
-            for _, sortType in ipairs(sortTypes) do
-                if State.IsDestroyed then break end
-                local cursor = ""
-                local page = 0
-                local baseUrl = workingHost .. "&SortType=" .. tostring(sortType)
+        local berhasil = muatLewatJsonRemote()
 
-                while page < maxPagesPerSort and not State.IsDestroyed do
-                    local url = baseUrl
-                    if cursor ~= "" then
-                        url = baseUrl .. "&Cursor=" .. HttpService:UrlEncode(cursor)
-                    end
-
-                    local data, status = httpGetCatalogJson(url)
-                    if not data and status == 429 then
-                        task.wait(1.5)
-                        data = httpGetCatalogJson(url)
-                    end
-
-                    if not data or type(data.data) ~= "table" or #data.data == 0 then
-                        break
-                    end
-
-                    fetchedFromApi = true
-                    for _, item in ipairs(data.data) do
-                        addEmoteToAll(item.id, item.name)
-                    end
-
-                    page = page + 1
-                    cursor = data.nextPageCursor or ""
-
-                    if page == 1 or page % 3 == 0 then
-                        if not State.IsDestroyed then
-                            StatusLabel.Text = "Memuat emote Marketplace: " .. tostring(#State.AllEmotes) .. "..."
-                            saveEmotesCache()
-                            if State.IsOpen and State.ViewMode == "All" and State.SearchQuery == "" then
-                                rebuildFilteredList(false)
-                            end
-                        end
-                    end
-
-                    if cursor == "" then break end
-                    task.wait(0.22)
-                end
-            end
-        else
-            local aesSorts = {
-                Enum.CatalogSortType.Relevance,
-                Enum.CatalogSortType.BestSelling,
-                Enum.CatalogSortType.MostFavorited,
-                Enum.CatalogSortType.RecentlyCreated,
-            }
-            for _, sortEnum in ipairs(aesSorts) do
-                if State.IsDestroyed then break end
-                pcall(function()
-                    local params = CatalogSearchParams.new()
-                    params.AssetTypes = { Enum.AssetType.EmoteAnimation }
-                    params.SortType = sortEnum
-                    local pages = AvatarEditorService:SearchCatalog(params)
-                    local p = 0
-                    while pages and p < 30 and not State.IsDestroyed do
-                        local current = pages:GetCurrentPage()
-                        if type(current) == "table" and #current > 0 then
-                            fetchedFromApi = true
-                            for _, item in ipairs(current) do
-                                addEmoteToAll(item.Id, item.Name)
-                            end
-                        else
-                            break
-                        end
-                        p = p + 1
-                        if p % 3 == 0 and not State.IsDestroyed then
-                            StatusLabel.Text = "Memuat emote Marketplace: " .. tostring(#State.AllEmotes) .. "..."
-                            saveEmotesCache()
-                            if State.IsOpen and State.ViewMode == "All" and State.SearchQuery == "" then
-                                rebuildFilteredList(false)
-                            end
-                        end
-                        if pages.IsFinished then break end
-                        local advOk = pcall(function()
-                            pages:AdvanceToNextPageAsync()
-                        end)
-                        if not advOk then break end
-                        task.wait(0.2)
-                    end
-                end)
-            end
+        if not berhasil and not Status.SudahDihancurkan then
+            LabelStatus.Text = "Memuat via Roblox AvatarEditorService..."
+            berhasil = muatLewatAvatarEditorService()
         end
 
-        if fetchedFromApi then
-            saveEmotesCache()
-        elseif #State.AllEmotes == 0 then
-            for _, item in ipairs(FALLBACK_EMOTES) do
-                addEmoteToAll(item.id, item.name)
-            end
+        if not berhasil and not Status.SudahDihancurkan then
+            LabelStatus.Text = "Memuat via Catalog API..."
+            berhasil = muatLewatCatalogApi()
         end
 
-        State.IsFetchingCatalog = false
-        if not State.IsDestroyed then
-            StatusLabel.Text = tostring(#State.AllEmotes) .. " Emote tersedia"
-            rebuildFilteredList(false)
+        Status.SedangMuatKatalog = false
+        if not Status.SudahDihancurkan then
+            LabelStatus.Text = formatAngka(#Status.SemuaEmote) .. " Emote tersedia"
+            bangunUlangDaftarTampil(false)
+            if berhasil and #Status.SemuaEmote >= MIN_CACHE_VALID then
+                tampilkanNotif("Berhasil memuat " .. formatAngka(#Status.SemuaEmote) .. " Emote Marketplace!", WARNA.Sukses)
+            end
         end
     end)
 end
 
 -- ============================================================
--- 16. INITIALIZATION & CLEANUP HOOK
+-- 17. INISIALISASI AWAL & FUNGSI PEMBERSIHAN (CLEANUP)
 -- ============================================================
-loadFavorites()
-local hasCache, isFresh = loadEmotesCache()
+muatFavorit()
 
-if hasCache then
-    StatusLabel.Text = tostring(#State.AllEmotes) .. " Emote dimuat dari cache"
-    rebuildFilteredList(true)
-    if not isFresh then
-        fetchMarketplaceEmotesAsync()
-    end
-else
-    for _, item in ipairs(FALLBACK_EMOTES) do
-        addEmoteToAll(item.id, item.name)
-    end
-    rebuildFilteredList(true)
-    fetchMarketplaceEmotesAsync()
+-- Isi emote cadangan sementara agar UI langsung bisa dibuka sambil katalog 62k dimuat
+for _, item in ipairs(EMOTE_CADANGAN) do
+    tambahEmoteKeDaftar(item.id, item.name)
 end
+bangunUlangDaftarTampil(true)
 
-showToast("KurooEmote v" .. VERSION .. " aktif! Tekan ( . ) atau ikon ☺ di atas.", COLORS.Accent)
-
-env.KurooEmoteCleanup = function()
-    State.IsDestroyed = true
-    stopCurrentEmote(0)
-    clearCharConns()
-    for _, conn in ipairs(State.Connections) do
-        pcall(function() conn:Disconnect() end)
+task.spawn(function()
+    local adaCache, masihSegar = muatCacheEmote()
+    if adaCache and not Status.SudahDihancurkan then
+        LabelStatus.Text = formatAngka(#Status.SemuaEmote) .. " Emote tersedia (cache)"
+        bangunUlangDaftarTampil(true)
+        if not masihSegar then
+            muatKatalogMarketplaceAsync()
+        end
+    else
+        muatKatalogMarketplaceAsync()
     end
-    table.clear(State.Connections)
-    if ScreenGui and ScreenGui.Parent then
-        ScreenGui:Destroy()
+end)
+
+tampilkanNotif("KurooEmote v" .. VERSI .. " aktif! Tekan ( . ) atau geser/klik ikon ☺.", WARNA.Aksen)
+
+-- Daftarkan fungsi pembersihan jika script dijalankan ulang
+lingkungan.KurooEmoteCleanup = function()
+    Status.SudahDihancurkan = true
+    hentikanEmoteAktif(0)
+    bersihkanKoneksiKarakter()
+    for _, koneksi in ipairs(Status.DaftarKoneksi) do
+        pcall(function() koneksi:Disconnect() end)
+    end
+    table.clear(Status.DaftarKoneksi)
+    if LayarGui and LayarGui.Parent then
+        LayarGui:Destroy()
     end
 end
