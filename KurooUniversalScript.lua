@@ -1,4 +1,5 @@
 local UI = loadstring(game:HttpGet("https://raw.githubusercontent.com/KurooNeko874/KurooUI/main/KurooUI.lua"))()
+local UI = loadstring(game:HttpGet("https://raw.githubusercontent.com/KurooNeko874/Universal-Script/refs/heads/main/KurooEmote.lua"))()
 
 -- ========== SERVICES & CORE REFERENCES ==========
 local Players = game:GetService("Players")
