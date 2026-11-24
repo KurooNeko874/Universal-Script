@@ -1,3 +1,4 @@
+-- Kuroo Universal Script v1.1.8 Plus
 local UI = loadstring(game:HttpGet("https://raw.githubusercontent.com/KurooNeko874/KurooUI/main/KurooUI.lua"))()
 
 task.spawn(function()
@@ -1080,31 +1081,226 @@ Players.PlayerRemoving:Connect(function(player)
     end
 end)
 
--- ========== HEADLESS VISUAL SYSTEM (FIXED) ==========
+-- ========== BODY PART VISUAL SYSTEM (HEADLESS & KORBLOX) ==========
 local headlessEnabled = false
+local BodyPartState = {
+    HeadlessHorseman = false,
+    KorbloxRight     = false,
+    KorbloxLeft      = false,
+}
+
+local KORBLOX_RIGHT_ID       = 139607718
+local KORBLOX_LEFT_ID        = 139607673
+local KORBLOX_R6_RIGHT_MESH  = "rbxassetid://101851696"
+local KORBLOX_R6_LEFT_MESH   = "rbxassetid://101851582"
+local KORBLOX_R6_TEXTURE     = "rbxassetid://101851254"
+
+local function clearTaggedVisuals(char, tagName)
+    if not char then return end
+    for _, child in ipairs(char:GetChildren()) do
+        if child.Name == tagName then
+            pcall(function() child:Destroy() end)
+        end
+    end
+end
+
+local function setPartHidden(part, hidden)
+    if not part or not part:IsA("BasePart") then return end
+    if hidden then
+        if part:GetAttribute("KurooOrigTrans") == nil then
+            part:SetAttribute("KurooOrigTrans", part.Transparency)
+        end
+        part.Transparency = 1
+        for _, child in ipairs(part:GetChildren()) do
+            if child:IsA("Decal") then
+                if child:GetAttribute("KurooOrigTrans") == nil then
+                    child:SetAttribute("KurooOrigTrans", child.Transparency)
+                end
+                child.Transparency = 1
+            end
+        end
+    else
+        local orig = part:GetAttribute("KurooOrigTrans")
+        part.Transparency = (orig ~= nil) and orig or 0
+        part:SetAttribute("KurooOrigTrans", nil)
+        for _, child in ipairs(part:GetChildren()) do
+            if child:IsA("Decal") then
+                local origD = child:GetAttribute("KurooOrigTrans")
+                child.Transparency = (origD ~= nil) and origD or 0
+                child:SetAttribute("KurooOrigTrans", nil)
+            end
+        end
+    end
+end
+
+local function weldVisualPart(targetPart, visualPart, parentContainer, offsetCFrame)
+    visualPart.CanCollide = false
+    visualPart.CanTouch = false
+    visualPart.CanQuery = false
+    visualPart.Massless = true
+    visualPart.Anchored = false
+    visualPart.CFrame = targetPart.CFrame * (offsetCFrame or CFrame.new())
+    visualPart.Parent = parentContainer
+
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0 = targetPart
+    weld.Part1 = visualPart
+    weld.Parent = visualPart
+end
 
 local function applyHeadlessToChar(char, state)
     if not char then return end
     local head = char:FindFirstChild("Head")
     if head then
-        head.Transparency = state and 1 or 0
-        for _, child in ipairs(head:GetChildren()) do
-            if child:IsA("Decal") then
-                child.Transparency = state and 1 or 0
+        setPartHidden(head, state)
+    end
+end
+
+local function applyKorbloxLegToChar(char, side, state)
+    if not char then return end
+    local tagName = (side == "Right") and "KurooKorbloxRight" or "KurooKorbloxLeft"
+    clearTaggedVisuals(char, tagName)
+
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local isR15 = hum and (hum.RigType == Enum.HumanoidRigType.R15)
+    local r15Parts = (side == "Right")
+        and { "RightUpperLeg", "RightLowerLeg", "RightFoot" }
+        or  { "LeftUpperLeg", "LeftLowerLeg", "LeftFoot" }
+    local r6PartName = (side == "Right") and "Right Leg" or "Left Leg"
+
+    if not state then
+        for _, pName in ipairs(r15Parts) do
+            setPartHidden(char:FindFirstChild(pName), false)
+        end
+        setPartHidden(char:FindFirstChild(r6PartName), false)
+        return
+    end
+
+    local folder = Instance.new("Folder")
+    folder.Name = tagName
+    folder.Parent = char
+
+    local assetId = (side == "Right") and KORBLOX_RIGHT_ID or KORBLOX_LEFT_ID
+    local ok, objs = pcall(function()
+        return game:GetObjects("rbxassetid://" .. tostring(assetId))
+    end)
+
+    if isR15 then
+        -- Sembunyikan semua bagian kaki asli R15
+        for _, pName in ipairs(r15Parts) do
+            setPartHidden(char:FindFirstChild(pName), true)
+        end
+
+        local r15Container = nil
+        if ok and type(objs) == "table" then
+            for _, root in ipairs(objs) do
+                r15Container = root:FindFirstChild("R15ArtistIntent")
+                    or root:FindFirstChild("R15Fixed")
+                    or root:FindFirstChild("R15")
+                    or root
+                if r15Container then break end
+            end
+        end
+
+        local attachedAny = false
+        if r15Container then
+            for _, pName in ipairs(r15Parts) do
+                local origPart = char:FindFirstChild(pName)
+                local srcPart = r15Container:FindFirstChild(pName, true)
+                if origPart and srcPart and srcPart:IsA("BasePart") then
+                    local clonePart = srcPart:Clone()
+                    clonePart.Name = "Korblox_" .. pName
+                    for _, child in ipairs(clonePart:GetChildren()) do
+                        if child:IsA("Motor6D") or child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("Script") or child:IsA("LocalScript") then
+                            child:Destroy()
+                        end
+                    end
+                    weldVisualPart(origPart, clonePart, folder)
+                    attachedAny = true
+                end
+            end
+        end
+
+        if ok and type(objs) == "table" then
+            for _, root in ipairs(objs) do
+                pcall(function() root:Destroy() end)
+            end
+        end
+
+        -- Fallback mesh jika asset R15 gagal dimuat
+        if not attachedAny then
+            local upperLeg = char:FindFirstChild(r15Parts[1])
+            if upperLeg then
+                local fakeLeg = Instance.new("Part")
+                fakeLeg.Name = "KorbloxFallbackLeg"
+                fakeLeg.Size = Vector3.new(1, 2, 1)
+                local mesh = Instance.new("SpecialMesh")
+                mesh.MeshType = Enum.MeshType.FileMesh
+                mesh.MeshId = (side == "Right") and KORBLOX_R6_RIGHT_MESH or KORBLOX_R6_LEFT_MESH
+                mesh.TextureId = KORBLOX_R6_TEXTURE
+                mesh.Parent = fakeLeg
+                weldVisualPart(upperLeg, fakeLeg, folder, CFrame.new(0, -0.35, 0))
+            end
+        end
+    else
+        -- Mode R6
+        local origLeg = char:FindFirstChild(r6PartName)
+        if origLeg then
+            setPartHidden(origLeg, true)
+            local fakeLeg = Instance.new("Part")
+            fakeLeg.Name = "KorbloxR6Leg"
+            fakeLeg.Size = origLeg.Size
+            local mesh = Instance.new("SpecialMesh")
+            mesh.MeshType = Enum.MeshType.FileMesh
+            mesh.MeshId = (side == "Right") and KORBLOX_R6_RIGHT_MESH or KORBLOX_R6_LEFT_MESH
+            mesh.TextureId = KORBLOX_R6_TEXTURE
+            mesh.Parent = fakeLeg
+            weldVisualPart(origLeg, fakeLeg, folder)
+        end
+        if ok and type(objs) == "table" then
+            for _, root in ipairs(objs) do
+                pcall(function() root:Destroy() end)
             end
         end
     end
 end
 
 local function setHeadless(state)
+    BodyPartState.HeadlessHorseman = state
     headlessEnabled = state
     applyHeadlessToChar(LocalPlayer.Character, state)
 end
 
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(0.5)
-    if headlessEnabled then
-        setHeadless(true)
+local function setKorbloxLeg(side, state)
+    if side == "Right" then
+        BodyPartState.KorbloxRight = state
+    else
+        BodyPartState.KorbloxLeft = state
+    end
+    applyKorbloxLegToChar(LocalPlayer.Character, side, state)
+end
+
+local function resetAllBodyParts()
+    BodyPartState.HeadlessHorseman = false
+    BodyPartState.KorbloxRight = false
+    BodyPartState.KorbloxLeft = false
+    headlessEnabled = false
+    local char = LocalPlayer.Character
+    applyHeadlessToChar(char, false)
+    applyKorbloxLegToChar(char, "Right", false)
+    applyKorbloxLegToChar(char, "Left", false)
+end
+
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    task.wait(0.6)
+    if BodyPartState.HeadlessHorseman then
+        applyHeadlessToChar(newChar, true)
+    end
+    if BodyPartState.KorbloxRight then
+        applyKorbloxLegToChar(newChar, "Right", true)
+    end
+    if BodyPartState.KorbloxLeft then
+        applyKorbloxLegToChar(newChar, "Left", true)
     end
 end)
 
@@ -1188,6 +1384,32 @@ local PresetItems = {
         Name       = "Dominus Empyreus",
         AssetId    = 21070012,
         EffectType = "None",
+    },
+    -- ===== 5 ITEM BEREFEK BARU (v1.1.8) =====
+    {
+        Name       = "Dominus Infernus",
+        AssetId    = 31101391,
+        EffectType = "InfernusFire",
+    },
+    {
+        Name       = "Dominus Frigidus",
+        AssetId    = 48545806,
+        EffectType = "FrigidusFrost",
+    },
+    {
+        Name       = "Void Star",
+        AssetId    = 1125510,
+        EffectType = "VoidSmoke",
+    },
+    {
+        Name       = "Red Sparkle Time Fedora",
+        AssetId    = 72082328,
+        EffectType = "RedSparkles",
+    },
+    {
+        Name       = "Flaming Mohawk",
+        AssetId    = 191101707,
+        EffectType = "OrangeFire",
     },
 }
 
@@ -1319,6 +1541,47 @@ local function EnsureSpecialEffect(handle, effectType)
         local sp = Instance.new("Sparkles")
         sp.Name = "KurooSparkles"
         sp.SparkleColor = Color3.fromRGB(255, 230, 120)
+        sp.Parent = handle
+    elseif effectType == "InfernusFire" then
+        local fire = Instance.new("Fire")
+        fire.Name = "KurooInfernusFire"
+        fire.Color = Color3.fromRGB(255, 65, 20)
+        fire.SecondaryColor = Color3.fromRGB(255, 200, 40)
+        fire.Heat = 12
+        fire.Size = 6
+        fire.Parent = handle
+        local sp = Instance.new("Sparkles")
+        sp.Name = "KurooInfernusEmbers"
+        sp.SparkleColor = Color3.fromRGB(255, 110, 30)
+        sp.Parent = handle
+    elseif effectType == "FrigidusFrost" then
+        local sp = Instance.new("Sparkles")
+        sp.Name = "KurooFrigidusSparkles"
+        sp.SparkleColor = Color3.fromRGB(165, 235, 255)
+        sp.Parent = handle
+        local smoke = Instance.new("Smoke")
+        smoke.Name = "KurooFrigidusMist"
+        smoke.Color = Color3.fromRGB(190, 240, 255)
+        smoke.Opacity = 0.25
+        smoke.RiseVelocity = 1.5
+        smoke.Size = 1.5
+        smoke.Parent = handle
+    elseif effectType == "VoidSmoke" then
+        local smoke = Instance.new("Smoke")
+        smoke.Name = "KurooVoidSmoke"
+        smoke.Color = Color3.fromRGB(35, 10, 60)
+        smoke.Opacity = 0.5
+        smoke.RiseVelocity = 2.5
+        smoke.Size = 2
+        smoke.Parent = handle
+        local sp = Instance.new("Sparkles")
+        sp.Name = "KurooVoidSparkles"
+        sp.SparkleColor = Color3.fromRGB(155, 75, 255)
+        sp.Parent = handle
+    elseif effectType == "RedSparkles" then
+        local sp = Instance.new("Sparkles")
+        sp.Name = "KurooRedSparkles"
+        sp.SparkleColor = Color3.fromRGB(255, 55, 75)
         sp.Parent = handle
     end
 end
@@ -1967,7 +2230,56 @@ sectionTheme:AddColorPicker({
 -- ========== Tab 4: Larping (Visual) ==========
 local tabLarping = window:AddTab({ Name = "Larping (Visual) ✨" })
 
-local sectionLarpItems = tabLarping:AddSection({ Name = "Daftar Item Limited (Visual)" })
+-- Section 1: Body Part (Korblox Deathspeaker Kaki Kanan/Kiri & Headless Horseman)
+local sectionLarpBody = tabLarping:AddSection({ Name = "Body Part" })
+local isSyncingBodyUI = false
+local togHeadlessHorseman, togKorbloxRight, togKorbloxLeft
+
+togKorbloxRight = sectionLarpBody:AddToggle({
+    Name    = "Korblox Deathspeaker (Kaki Kanan)",
+    Default = false,
+    Callback = function(state)
+        if isSyncingBodyUI then return end
+        setKorbloxLeg("Right", state)
+        notify("Body Part", "Korblox Kaki Kanan: " .. (state and "ON" or "OFF"), 2)
+    end,
+})
+
+togKorbloxLeft = sectionLarpBody:AddToggle({
+    Name    = "Korblox Deathspeaker (Kaki Kiri)",
+    Default = false,
+    Callback = function(state)
+        if isSyncingBodyUI then return end
+        setKorbloxLeg("Left", state)
+        notify("Body Part", "Korblox Kaki Kiri: " .. (state and "ON" or "OFF"), 2)
+    end,
+})
+
+togHeadlessHorseman = sectionLarpBody:AddToggle({
+    Name    = "Headless Horseman",
+    Default = false,
+    Callback = function(state)
+        if isSyncingBodyUI then return end
+        setHeadless(state)
+        notify("Body Part", "Headless Horseman: " .. (state and "ON" or "OFF"), 2)
+    end,
+})
+
+sectionLarpBody:AddButton({
+    Name     = "Reset Semua Body Part",
+    Callback = function()
+        isSyncingBodyUI = true
+        if togKorbloxRight     then togKorbloxRight:Set(false) end
+        if togKorbloxLeft      then togKorbloxLeft:Set(false) end
+        if togHeadlessHorseman then togHeadlessHorseman:Set(false) end
+        isSyncingBodyUI = false
+        resetAllBodyParts()
+        notify("Body Part", "Semua Body Part di-reset ke asli.", 2)
+    end,
+})
+
+-- Section 2: Items (Daftar Item Limited & Item Berefek)
+local sectionLarpItems = tabLarping:AddSection({ Name = "Items" })
 local larpItemToggles = {}
 local larpItemDropdown = nil
 local isSyncingLarpUI = false
@@ -1989,15 +2301,6 @@ local function syncLarpSlidersToItem(itemName)
     if larpRotZSlider   then larpRotZSlider:Set(cfg.RotZ) end
     isSyncingLarpUI = false
 end
-
-sectionLarpItems:AddToggle({
-    Name = "Headless Visual",
-    Default = false,
-    Callback = function(state)
-        setHeadless(state)
-        notify("Headless", state and "ON" or "OFF", 2)
-    end,
-})
 
 local larpDropdownOptions = {}
 for _, item in ipairs(PresetItems) do
