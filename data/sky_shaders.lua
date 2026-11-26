@@ -127,7 +127,7 @@ return {
         Clouds = { Cover = 0.62, Density = 0.68, Color = Color3.fromRGB(245, 248, 252) },
     },
 
-    -- Purple Pink Clouds (gaya awan pink-ungu berbintang ala @Vuhracity)
+    -- Purple Pink Clouds (100% tekstur asli @Vuhracity)
     ["Purple Pink Clouds"] = {
         ClockTime  = 19.2,
         Brightness = 2.1,
@@ -135,15 +135,15 @@ return {
         Outdoor    = Color3.fromRGB(165, 130, 185),
         Exposure   = 0.16,
         Skybox = {
-            Bk = "rbxassetid://271042516",
-            Dn = "rbxassetid://271077243",
-            Ft = "rbxassetid://271042556",
-            Lf = "rbxassetid://271042310",
-            Rt = "rbxassetid://271042467",
-            Up = "rbxassetid://271077958",
-            StarCount = 4500,
-            SunSize   = 14,
-            MoonSize  = 16,
+            Bk = "rbxassetid://81858382098344",
+            Dn = "rbxassetid://138472117789684",
+            Ft = "rbxassetid://95687237979398",
+            Lf = "rbxassetid://84924000207295",
+            Rt = "rbxassetid://99961685452126",
+            Up = "rbxassetid://104038404823203",
+            StarCount = 5000,
+            SunSize   = 11,
+            MoonSize  = 11,
         },
         Atmosphere = {
             Density = 0.32,
