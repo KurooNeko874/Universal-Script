@@ -4,14 +4,14 @@
 
 **Script Universal Roblox All-in-One dengan UI Persona 5 Edition ([KurooUI WindVersion](https://github.com/KurooNeko874/KurooUI_WindVersion)) & Roda Emote 62.000+ Marketplace**
 
-[![Version](https://img.shields.io/badge/Version-1.2.1%20Season%20%26%20Modular-E60012?style=for-the-badge)](https://github.com/KurooNeko874/Universal-Script)
+[![Version](https://img.shields.io/badge/Version-1.2.2%20KurooHub%20Sync-E60012?style=for-the-badge)](https://github.com/KurooNeko874/Universal-Script)
 [![UI Library](https://img.shields.io/badge/UI-KurooUI%20WindVersion-09090B?style=for-the-badge&labelColor=E60012)](https://github.com/KurooNeko874/KurooUI_WindVersion)
 [![KurooEmote](https://img.shields.io/badge/KurooEmote-v1.1.0%20(62K+%20Emotes)-FFCC33?style=for-the-badge)](https://github.com/KurooNeko874/Universal-Script)
 [![Platform](https://img.shields.io/badge/Support-PC%20%26%20Mobile-40D680?style=for-the-badge)](#)
 [![Key System](https://img.shields.io/badge/Key%20System-No%20Key-brightgreen?style=for-the-badge)](#)
 
 [![TikTok](https://img.shields.io/badge/TikTok-@kuro.neko874-000000?style=for-the-badge&logo=tiktok&logoColor=white)](https://www.tiktok.com/@kuro.neko874)
-[![Discord](https://img.shields.io/badge/Discord-kuroneko4411-5865F2?style=for-the-badge&logo=discord&logoColor=white)](#kontak--komunitas--contact)
+[![Discord](https://img.shields.io/badge/Discord-KurooHub%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/3b2H9RXbS)
 [![GitHub](https://img.shields.io/badge/GitHub-KurooNeko874-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/KurooNeko874)
 
 <br/>
@@ -25,8 +25,8 @@
 ## 📸 Preview / Tangkapan Layar
 
 <div align="center">
-  <img src="assets/preview-main.png" alt="Kuroo Universal Script v1.2.1 - Persona 5 Edition" width="85%" />
-  <p><i>Tampilan Utama Kuroo Universal Script v1.2.1 (Powered by KurooUI WindVersion — Persona 5 Edition)</i></p>
+  <img src="assets/preview-main.png" alt="Kuroo Universal Script v1.2.2 - Persona 5 Edition" width="85%" />
+  <p><i>Tampilan Utama Kuroo Universal Script v1.2.2 (Powered by KurooUI WindVersion — Persona 5 Edition)</i></p>
 </div>
 
 <br/>
@@ -52,7 +52,7 @@
 
 ## ⚡ Cara Menggunakan (Loadstring)
 
-### 1. Paket Lengkap (Universal Script v1.2.1 + KurooEmote)
+### 1. Paket Lengkap (Universal Script v1.2.2 + KurooEmote)
 Salin dan jalankan kode berikut di executor Anda:
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/KurooNeko874/Universal-Script/refs/heads/main/KurooUniversalScript.lua"))()
@@ -66,12 +66,17 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/KurooNeko874/Universa
 
 ---
 
-## ✨ Fitur Utama (`v1.2.1`)
+## ✨ Fitur Utama (`v1.2.2`)
 
 ### 🧩 Kuroo Universal Script (`KurooUI WindVersion — Persona 5 Edition`)
-Dibangun menggunakan [**KurooUI WindVersion**](https://github.com/KurooNeko874/KurooUI_WindVersion) dengan tampilan **Persona 5 (Hitam–Merah–Putih)**, **Arsitektur Modular Ringan** (loader super cepat dengan modul open-source di folder `modules/` & `data/`), Profile Card + halaman **UI Settings** terintegrasi, **Single-Instance Auto-Cleanup Engine**, serta dukungan penuh **PC & Mobile**:
+Dibangun menggunakan [**KurooUI WindVersion**](https://github.com/KurooNeko874/KurooUI_WindVersion) dengan tampilan **Persona 5 (Hitam–Merah–Putih)**, **Arsitektur Modular Ringan** (loader super cepat dengan modul open-source di folder `modules/` & `data/`), **KurooHub Cross-Player Sync**, Profile Card + halaman **UI Settings** terintegrasi, **Single-Instance Auto-Cleanup Engine**, serta dukungan penuh **PC & Mobile**:
 
-- **Main** — ESP Universal, Anti-AFK, Click Teleport (`Ctrl + Klik` PC), Freecam PC (`WASD` + **`Q`/`E`** naik-turun seperti Roblox Studio + `Shift` boost + Scroll FOV), dan Rejoin Server.
+- **Player *(BARU di v1.2.2! — Tab Paling Atas)***:
+  - **Player Profile** — Menampilkan DisplayName, `@username`, User ID, **Umur Akun (Hari + Tahun/Bulan)**, dan status koneksi **KurooHub Sync** real-time.
+  - **Discord KurooHub** — Informasi komunitas & tombol 1-klik copy link invite **[discord.gg/3b2H9RXbS](https://discord.gg/3b2H9RXbS)**.
+  - **Overhead Capsule Tag (Klik = Teleport!)** — Tag kapsul dengan ikon bulat di kiri + nama player di atas kepala sesama user KurooHub *(dengan Badge Emas khusus `OWNER`)* — **klik kapsul untuk langsung Teleport** ke player tersebut, lengkap dengan toggle ON/OFF.
+  - **Auto-Sync Larping Antar User** — Semua user KurooHub di map yang sama otomatis saling melihat **Item Larping, Headless & Korblox** satu sama lain secara real-time tanpa perlu setting manual!
+- **Main *(Diperbarui di v1.2.2!)*** — **Admin Fly (Pose Diam Tegak PC & Mobile)** + Fly Speed, **Noclip**, **Infinite Jump + JumpPower**, **FPS Booster / Anti-Lag**, ESP Universal, Anti-AFK, Click Teleport (`Ctrl + Klik` PC), Freecam PC (`WASD` + `Q`/`E`), dan Rejoin Server.
 - **Spectate** — Tab khusus dengan **Live Player List** (foto avatar, DisplayName, `@username`) + **pencarian real-time**; klik kartu player langsung masuk target & tekan Spectate.
 - **Sync** — Tab khusus **Sync Emote Player** dengan **Live Player List** & pencarian real-time yang sama.
 - **Combat** — Pengaturan WalkSpeed (Jalan / Normal / Lari) dengan mode Hold (`Ctrl`/`Shift`) atau Toggle.
@@ -118,21 +123,22 @@ Roda emote kustom bergaya radial 8-slot yang menggantikan Emote Wheel bawaan Rob
 <summary><b>Click to expand English documentation</b></summary>
 
 ### Overview
-**Kuroo Universal Script v1.2.1** is a fast, modular all-in-one Roblox universal utility script powered by [**KurooUI WindVersion (Persona 5 Edition)**](https://github.com/KurooNeko874/KurooUI_WindVersion), bundled with **KurooEmote v1.1.0** — a custom 8-slot radial Emote Wheel featuring **62,000+ Roblox Marketplace emotes** with full **PC & Mobile** support, **open-source modules (`modules/` & `data/`)**, and **No Key System**.
+**Kuroo Universal Script v1.2.2** is a fast, modular all-in-one Roblox universal utility script powered by [**KurooUI WindVersion (Persona 5 Edition)**](https://github.com/KurooNeko874/KurooUI_WindVersion), bundled with **KurooEmote v1.1.0** — a custom 8-slot radial Emote Wheel featuring **62,000+ Roblox Marketplace emotes**, **KurooHub Cross-Player Sync**, **open-source modules (`modules/` & `data/`)**, full **PC & Mobile** support, and **No Key System**.
 
 ### Quick Start
 ```lua
--- Full Bundle (Universal Script v1.2.1 + KurooEmote)
+-- Full Bundle (Universal Script v1.2.2 + KurooEmote)
 loadstring(game:HttpGet("https://raw.githubusercontent.com/KurooNeko874/Universal-Script/refs/heads/main/KurooUniversalScript.lua"))()
 
 -- KurooEmote Standalone Only
 loadstring(game:HttpGet("https://raw.githubusercontent.com/KurooNeko874/Universal-Script/refs/heads/main/KurooEmote.lua"))()
 ```
 
-### Key Features (`v1.2.1`)
+### Key Features (`v1.2.2`)
 - **Persona 5 Edition UI (`KurooUI WindVersion`) & Parallel Modular Loader:** Crisp Black/Red/White aesthetic, lightweight parallel module loading, circular draggable open button, Sidebar Profile Card + PC UI Settings page, and Single-Instance Auto-Cleanup Engine on re-execute.
-- **8 Organized Tabs:**
-  - `Main` — Universal ESP, Anti-AFK, Click Teleport, Studio-style Freecam (`WASD` + `Q`/`E` vertical), Rejoin.
+- **9 Organized Tabs:**
+  - `Player` *(Top Tab)* — Player Profile & Account Age (Days), **Discord KurooHub** invite (`discord.gg/3b2H9RXbS`), **Clickable Overhead Capsule Tag** (click to Teleport, Gold `OWNER` badge, ON/OFF toggle), and **Real-Time Auto-Sync Larping** across all KurooHub users in the same server.
+  - `Main` — **Admin Fly (Upright Dummy Pose, PC & Mobile)** + Fly Speed, **Noclip**, **Infinite Jump + JumpPower**, **Reversible FPS Booster**, Universal ESP, Anti-AFK, Click Teleport, Studio-style Freecam (`WASD` + `Q`/`E`), Rejoin.
   - `Spectate` & `Sync` — Dedicated tabs with **Live Player Lists** (Avatar + DisplayName + `@username`) and instant real-time search filtering.
   - `Combat` — WalkSpeed controller (Walk / Normal / Sprint, Hold or Toggle mode).
   - `Animations` — Integrated KurooEmote, Auto-Apply on Respawn/Rejoin, and full animation pack presets.
