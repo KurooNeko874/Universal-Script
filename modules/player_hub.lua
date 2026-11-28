@@ -130,8 +130,9 @@ return function(ctx)
         bb.AlwaysOnTop = true
         bb.Active = true
         bb.ResetOnSpawn = false
+        bb.ClipsDescendants = false
         bb.LightInfluence = 0
-        bb.MaxDistance = 300
+        bb.MaxDistance = math.huge
         bb.StudsOffset = Vector3.new(0, 3.1, 0)
         bb.Size = UDim2.fromOffset(isOwner and 280 or 220, 34)
         bb.Parent = tagFolder
