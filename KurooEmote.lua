@@ -1823,6 +1823,20 @@ local AnimSys = (function()
     loadActiveState()
     ensureAnimDbLoaded()
 
+    -- Langsung terapkan animasi terakhir yang dipakai begitu script di-execute!
+    if S.AutoApply and next(S.ActiveState) ~= nil then
+        task.spawn(function()
+            local char = PemainLokal.Character or PemainLokal.CharacterAdded:Wait()
+            if not char then return end
+            char:WaitForChild("Humanoid", 10)
+            char:WaitForChild("Animate", 10)
+            task.wait(0.35)
+            if S.AutoApply and next(S.ActiveState) ~= nil and not Status.SudahDihancurkan then
+                applyTableToChar(char, S.ActiveState)
+            end
+        end)
+    end
+
     -- 1) Tombol "Animation" tepat di bawah tombol Favorit
     local TombolModeAnim = Instance.new("TextButton")
     TombolModeAnim.Name = "TombolModeAnimasi"

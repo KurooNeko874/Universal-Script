@@ -1459,10 +1459,6 @@ local XmasZoo = (function()
         Z.Params = RaycastParams.new()
         Z.Params.FilterType = Enum.RaycastFilterType.Exclude
         Z.Params.RespectCanCollide = true
-
-        Z.Pet = buildPetRudolph()
-        Z.Pet:PivotTo(root.CFrame * CFrame.new(3, 0, 4))
-        Z.Pet.Parent = workspace
         setFilter()
 
         local c = root.Position
@@ -1497,7 +1493,6 @@ local XmasZoo = (function()
             for _, a in ipairs(Z.Animals) do
                 pcall(stepAnimal, a, dt, now, ppos)
             end
-            pcall(updatePet, now - t0, dt)
         end)
     end
     return Z
@@ -1704,50 +1699,50 @@ local function applySeasonMode(modeName)
 
         if not SkyShaderPresets["Musim Gugur (Autumn)"] then
             SkyShaderPresets["Musim Gugur (Autumn)"] = {
-                ClockTime  = 16.6,
-                Brightness = 2.35,
-                Ambient    = Color3.fromRGB(132, 92, 48),
-                Outdoor    = Color3.fromRGB(185, 134, 72),
-                Exposure   = 0.08,
+                ClockTime  = 15.2,
+                Brightness = 2.2,
+                Ambient    = Color3.fromRGB(118, 102, 82),
+                Outdoor    = Color3.fromRGB(158, 138, 108),
+                Exposure   = 0.05,
                 Skybox = {
-                    Bk = "rbxassetid://15502525195",
-                    Dn = "rbxassetid://15502522797",
-                    Ft = "rbxassetid://15502524520",
-                    Lf = "rbxassetid://15502522129",
-                    Rt = "rbxassetid://15502523711",
-                    Up = "rbxassetid://15502526102",
+                    Bk = "rbxassetid://18603249071",
+                    Dn = "rbxassetid://18603241716",
+                    Ft = "rbxassetid://18603244510",
+                    Lf = "rbxassetid://18603245276",
+                    Rt = "rbxassetid://18603246382",
+                    Up = "rbxassetid://18603261859",
                     StarCount = 2000,
-                    SunSize   = 22,
+                    SunSize   = 20,
                     MoonSize  = 11,
                 },
                 Atmosphere = {
-                    Density = 0.34,
-                    Offset  = 0.16,
-                    Color   = Color3.fromRGB(235, 188, 128),
-                    Decay   = Color3.fromRGB(186, 118, 56),
-                    Glare   = 0.65,
-                    Haze    = 2.1,
+                    Density = 0.28,
+                    Offset  = 0.2,
+                    Color   = Color3.fromRGB(224, 210, 188),
+                    Decay   = Color3.fromRGB(178, 154, 124),
+                    Glare   = 0.25,
+                    Haze    = 1.4,
                 },
-                Bloom = { Intensity = 0.52, Size = 28, Threshold = 0.9 },
-                CC    = { Brightness = 0.02, Contrast = 0.16, Saturation = 0.12, TintColor = Color3.fromRGB(255, 228, 188) },
-                SunRays = { Intensity = 0.24, Spread = 0.88 },
-                Clouds = { Cover = 0.55, Density = 0.65, Color = Color3.fromRGB(252, 214, 165) },
+                Bloom = { Intensity = 0.35, Size = 22, Threshold = 0.96 },
+                CC    = { Brightness = 0.01, Contrast = 0.1, Saturation = -0.04, TintColor = Color3.fromRGB(252, 244, 232) },
+                SunRays = { Intensity = 0.12, Spread = 0.75 },
+                Clouds = { Cover = 0.52, Density = 0.6, Color = Color3.fromRGB(246, 238, 226) },
             }
         end
         applySkyShaderPreset("Musim Gugur (Autumn)")
         setWeatherMode("Daun Gugur (Autumn)")
         SeasonAudio.Play("MistWind")
 
-        -- Ubah warna Terrain menjadi nuansa Golden Brown / Autumn
+        -- Ubah warna Terrain menjadi nuansa Golden Brown lembut & natural
         local autumnTerrainColors = {
-            [Enum.Material.Grass]      = Color3.fromRGB(184, 126, 52),
-            [Enum.Material.LeafyGrass] = Color3.fromRGB(196, 114, 42),
-            [Enum.Material.Ground]     = Color3.fromRGB(134, 88, 48),
-            [Enum.Material.Mud]        = Color3.fromRGB(110, 72, 42),
-            [Enum.Material.Sand]       = Color3.fromRGB(198, 152, 86),
-            [Enum.Material.Rock]       = Color3.fromRGB(128, 108, 86),
-            [Enum.Material.Slate]      = Color3.fromRGB(122, 104, 84),
-            [Enum.Material.Snow]       = Color3.fromRGB(214, 178, 128),
+            [Enum.Material.Grass]      = Color3.fromRGB(154, 128, 78),
+            [Enum.Material.LeafyGrass] = Color3.fromRGB(164, 124, 72),
+            [Enum.Material.Ground]     = Color3.fromRGB(126, 98, 68),
+            [Enum.Material.Mud]        = Color3.fromRGB(108, 84, 58),
+            [Enum.Material.Sand]       = Color3.fromRGB(182, 158, 118),
+            [Enum.Material.Rock]       = Color3.fromRGB(128, 116, 100),
+            [Enum.Material.Slate]      = Color3.fromRGB(122, 112, 98),
+            [Enum.Material.Snow]       = Color3.fromRGB(218, 202, 178),
         }
         local terrain = workspace:FindFirstChildOfClass("Terrain")
         if terrain then
@@ -1764,13 +1759,13 @@ local function applySeasonMode(modeName)
             end
         end
 
-        -- Ubah Part rumput / daun / tanah di Workspace menjadi warna musim gugur secara bertahap
+        -- Ubah Part rumput / daun / tanah di Workspace menjadi warna musim gugur lembut secara bertahap
         task.spawn(function()
             local foliageCols = {
-                Color3.fromRGB(204, 102, 34),
-                Color3.fromRGB(216, 148, 44),
-                Color3.fromRGB(172, 66, 32),
-                Color3.fromRGB(168, 106, 42),
+                Color3.fromRGB(184, 118, 58),
+                Color3.fromRGB(196, 154, 76),
+                Color3.fromRGB(156, 86, 54),
+                Color3.fromRGB(148, 112, 68),
             }
             local descendants = workspace:GetDescendants()
             local processed = 0
@@ -1793,9 +1788,9 @@ local function applySeasonMode(modeName)
                         if isFoliage then
                             inst.Color = foliageCols[math.random(1, #foliageCols)]
                         elseif isStone then
-                            inst.Color = Color3.fromRGB(132, 110, 88)
+                            inst.Color = Color3.fromRGB(130, 118, 102)
                         else
-                            inst.Color = Color3.fromRGB(174, 118, 52)
+                            inst.Color = Color3.fromRGB(156, 126, 78)
                         end
                     end)
                 end
