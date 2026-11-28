@@ -49,8 +49,310 @@ local hasBackedUpLighting = false
 local activeSkyPreset = "Default"
 local activeWeatherMode = "Normal"
 local weatherPart = nil
+local weatherSplashPart = nil
 local weatherConn = nil
 local Snow3D = { folder = nil, flakes = {} }
+
+-- ========== SEASON & WEATHER AMBIENT AUDIO (AUTO-FALLBACK PUBLIC SFX) ==========
+local SeasonAudio = {}
+do
+    local SoundService = game:GetService("SoundService")
+    local TweenService = game:GetService("TweenService")
+
+    local AUDIO_BANKS = {
+        WinterWind = {
+            "rbxassetid://9056698612",     -- Heavy Wind Ambience 2 (Roblox Official)
+            "rbxassetid://6455667685",     -- Wind Sound Effect
+            "rbxassetid://9120769331",     -- Wind Ambience Fallback
+        },
+        HeavyRain = {
+            "rbxassetid://137061816250912", -- Rain Sound Effect
+            "rbxassetid://88831001122997",  -- Rain Sound Effects
+            "rbxassetid://16850883198",     -- Rain Ambience
+            "rbxassetid://9056698612",      -- Wind/Storm Fallback
+        },
+        MistWind = {
+            "rbxassetid://6455667685",     -- Soft Wind Ambience
+            "rbxassetid://9056698612",     -- Wind Fallback
+        },
+    }
+
+    local enabled = true
+    local volume = 0.45
+    local activeSound = nil
+    local activeKind = nil
+    local playToken = 0
+
+    function SeasonAudio.Stop(instant)
+        playToken = playToken + 1
+        activeKind = nil
+        if not activeSound then return end
+        local snd = activeSound
+        activeSound = nil
+        if instant then
+            pcall(function() snd:Stop(); snd:Destroy() end)
+        else
+            pcall(function()
+                TweenService:Create(snd, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Volume = 0 }):Play()
+            end)
+            task.delay(0.5, function()
+                if snd and snd.Parent then
+                    pcall(function() snd:Stop(); snd:Destroy() end)
+                end
+            end)
+        end
+    end
+
+    function SeasonAudio.Play(kind)
+        if not kind or not AUDIO_BANKS[kind] then
+            SeasonAudio.Stop(false)
+            return
+        end
+        if activeKind == kind and activeSound and activeSound.Parent then
+            pcall(function() activeSound.Volume = enabled and volume or 0 end)
+            return
+        end
+
+        SeasonAudio.Stop(true)
+        activeKind = kind
+        playToken = playToken + 1
+        local myToken = playToken
+
+        if not enabled then return end
+
+        local ids = AUDIO_BANKS[kind]
+        task.spawn(function()
+            for _, assetId in ipairs(ids) do
+                if playToken ~= myToken or not enabled then return end
+                local snd = Instance.new("Sound")
+                snd.Name = "KurooSeasonAmbient"
+                snd.SoundId = assetId
+                snd.Looped = true
+                snd.Volume = 0
+                snd.PlaybackSpeed = (kind == "MistWind") and 0.82 or ((kind == "WinterWind") and 0.92 or 1.0)
+                snd.Parent = SoundService
+
+                local okPlay = pcall(function() snd:Play() end)
+                -- Tunggu max 1.8 detik untuk memastikan audio benar-benar ter-load
+                local waited = 0
+                while waited < 1.8 and playToken == myToken do
+                    if snd.IsLoaded and snd.TimeLength > 0 then break end
+                    task.wait(0.15)
+                    waited = waited + 0.15
+                end
+
+                if playToken ~= myToken or not enabled then
+                    pcall(function() snd:Stop(); snd:Destroy() end)
+                    return
+                end
+
+                if okPlay and snd.IsLoaded and snd.TimeLength > 0 then
+                    activeSound = snd
+                    pcall(function()
+                        TweenService:Create(snd, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Volume = volume }):Play()
+                    end)
+                    return
+                else
+                    pcall(function() snd:Stop(); snd:Destroy() end)
+                end
+            end
+        end)
+    end
+
+    function SeasonAudio.SetEnabled(state)
+        enabled = (state == true)
+        if not enabled then
+            if activeSound and activeSound.Parent then
+                pcall(function() activeSound.Volume = 0 end)
+            end
+        else
+            if activeSound and activeSound.Parent then
+                pcall(function() activeSound.Volume = volume end)
+            elseif activeKind then
+                local k = activeKind
+                activeKind = nil
+                SeasonAudio.Play(k)
+            end
+        end
+    end
+
+    function SeasonAudio.SetVolume(pct)
+        volume = math.clamp((tonumber(pct) or 45) / 100, 0, 1)
+        if enabled and activeSound and activeSound.Parent then
+            pcall(function() activeSound.Volume = volume end)
+        end
+    end
+end
+
+-- ========== RAIN PUDDLES (EFEK BECEK / GENANGAN AIR + CIPRATAN KAKI) ==========
+local RainPuddles = {}
+do
+    local folder = nil
+    local conn = nil
+    local footAtt = nil
+    local footEmitter = nil
+    local lastCenter = nil
+    local active = false
+
+    local function clearFootSplash()
+        if footEmitter then pcall(function() footEmitter:Destroy() end); footEmitter = nil end
+        if footAtt then pcall(function() footAtt:Destroy() end); footAtt = nil end
+    end
+
+    local function ensureFootSplash()
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if not root then return nil end
+        if footAtt and footAtt.Parent == root and footEmitter and footEmitter.Parent == footAtt then
+            return footEmitter
+        end
+        clearFootSplash()
+        local att = Instance.new("Attachment")
+        att.Name = "KurooFootSplashAtt"
+        att.Position = Vector3.new(0, -2.75, 0)
+        att.Parent = root
+        footAtt = att
+
+        local em = Instance.new("ParticleEmitter")
+        em.Name = "KurooFootSplash"
+        em.Color = ColorSequence.new(Color3.fromRGB(190, 210, 225))
+        em.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.2),
+            NumberSequenceKeypoint.new(0.7, 0.55),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+        em.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.12),
+            NumberSequenceKeypoint.new(0.5, 0.24),
+            NumberSequenceKeypoint.new(1, 0.06),
+        })
+        em.Speed = NumberRange.new(4, 9)
+        em.Acceleration = Vector3.new(0, -26, 0)
+        em.Lifetime = NumberRange.new(0.22, 0.38)
+        em.SpreadAngle = Vector2.new(65, 65)
+        em.EmissionDirection = Enum.NormalId.Top
+        em.Rate = 0
+        em.Parent = att
+        footEmitter = em
+        return em
+    end
+
+    local function spawnPuddlesAround(origin)
+        if folder then pcall(function() folder:Destroy() end); folder = nil end
+        local f = Instance.new("Folder")
+        f.Name = "KurooRainPuddles"
+        f.Parent = workspace
+        folder = f
+
+        local rp = RaycastParams.new()
+        rp.FilterType = Enum.RaycastFilterType.Exclude
+        local excl = { f }
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Character then table.insert(excl, p.Character) end
+        end
+        rp.FilterDescendantsInstances = excl
+
+        local targetCount = isMobile and 14 or 26
+        local spawned = 0
+        local attempts = 0
+
+        while spawned < targetCount and attempts < targetCount * 4 do
+            attempts = attempts + 1
+            local ang = math.random() * math.pi * 2
+            local dist = 6 + math.random() * 68
+            local rx = origin.X + math.cos(ang) * dist
+            local rz = origin.Z + math.sin(ang) * dist
+            local res = workspace:Raycast(Vector3.new(rx, origin.Y + 45, rz), Vector3.new(0, -110, 0), rp)
+            if res and res.Normal.Y >= 0.8 then
+                local hit = res.Instance
+                local okSurface = hit:IsA("Terrain") or (hit:IsA("BasePart") and hit.Anchored and hit.CanCollide and hit.Transparency < 0.5)
+                if okSurface then
+                    local diam = 4.2 + math.random() * 8.5
+                    local puddle = Instance.new("Part")
+                    puddle.Name = "KurooPuddle"
+                    puddle.Shape = Enum.PartType.Cylinder
+                    puddle.Anchored = true
+                    puddle.CanCollide = false
+                    puddle.CanTouch = false
+                    puddle.CanQuery = false
+                    puddle.CastShadow = false
+                    puddle.Material = Enum.Material.Glass
+                    puddle.Reflectance = 0.78
+                    puddle.Transparency = 0.28
+                    puddle.Color = Color3.fromRGB(34, 46, 56)
+                    -- Cylinder di Roblox memanjang di sumbu X -> putar Z 90 derajat agar pipih di tanah
+                    puddle.Size = Vector3.new(0.06, diam, diam * (0.72 + math.random() * 0.45))
+                    local up = res.Normal.Unit
+                    local right = up:Cross(Vector3.new(0, 0, 1))
+                    if right.Magnitude < 0.01 then right = up:Cross(Vector3.new(1, 0, 0)) end
+                    right = right.Unit
+                    local back = right:Cross(up).Unit
+                    local surfCF = CFrame.fromMatrix(res.Position + up * 0.04, right, up, back)
+                    puddle.CFrame = surfCF * CFrame.Angles(0, math.random() * math.pi * 2, math.rad(90))
+                    puddle.Parent = f
+
+                    -- Cipratan rintik hujan kecil di permukaan genangan
+                    local rip = Instance.new("ParticleEmitter")
+                    rip.Name = "PuddleSplash"
+                    rip.EmissionDirection = Enum.NormalId.Right
+                    rip.Color = ColorSequence.new(Color3.fromRGB(205, 222, 238))
+                    rip.Transparency = NumberSequence.new({
+                        NumberSequenceKeypoint.new(0, 0.25),
+                        NumberSequenceKeypoint.new(1, 1),
+                    })
+                    rip.Size = NumberSequence.new({
+                        NumberSequenceKeypoint.new(0, 0.1),
+                        NumberSequenceKeypoint.new(1, 0.22),
+                    })
+                    rip.Speed = NumberRange.new(2.2, 4.5)
+                    rip.Acceleration = Vector3.new(0, -18, 0)
+                    rip.Lifetime = NumberRange.new(0.18, 0.32)
+                    rip.SpreadAngle = Vector2.new(35, 35)
+                    rip.Rate = isMobile and 4 or 9
+                    rip.Parent = puddle
+
+                    spawned = spawned + 1
+                end
+            end
+        end
+        lastCenter = origin
+    end
+
+    function RainPuddles.Start()
+        if active then return end
+        active = true
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local cam = getCamera()
+        local origin = (root and root.Position) or (cam and cam.CFrame.Position) or Vector3.new(0, 10, 0)
+        pcall(spawnPuddlesAround, origin)
+
+        conn = RunService.Heartbeat:Connect(function()
+            if not active then return end
+            local c = LocalPlayer.Character
+            local r = c and c:FindFirstChild("HumanoidRootPart")
+            local h = c and c:FindFirstChildOfClass("Humanoid")
+            if r then
+                if not lastCenter or (r.Position - lastCenter).Magnitude > 75 then
+                    pcall(spawnPuddlesAround, r.Position)
+                end
+                local em = ensureFootSplash()
+                if em and h then
+                    local movingOnGround = (h.MoveDirection.Magnitude > 0.1) and (h.FloorMaterial ~= Enum.Material.Air)
+                    em.Rate = movingOnGround and (isMobile and 12 or 24) or 0
+                end
+            end
+        end)
+    end
+
+    function RainPuddles.Stop()
+        active = false
+        lastCenter = nil
+        if conn then conn:Disconnect(); conn = nil end
+        clearFootSplash()
+        if folder then pcall(function() folder:Destroy() end); folder = nil end
+    end
+end
 
 local KUROO_SHADER_NAMES = {
     KurooShaderSky        = true,
@@ -274,9 +576,15 @@ local function setWeatherMode(mode)
         pcall(function() weatherPart:Destroy() end)
         weatherPart = nil
     end
+    if weatherSplashPart then
+        pcall(function() weatherSplashPart:Destroy() end)
+        weatherSplashPart = nil
+    end
+    RainPuddles.Stop()
     clear3DSnowflakes()
 
     if mode == "Normal" then
+        SeasonAudio.Stop(false)
         return
     end
 
@@ -287,7 +595,7 @@ local function setWeatherMode(mode)
     part.CanTouch = false
     part.CanQuery = false
     part.Transparency = 1
-    part.Size = Vector3.new(85, 1, 85)
+    part.Size = (mode == "Hujan (Rain)") and Vector3.new(105, 1, 105) or Vector3.new(85, 1, 85)
     part.Parent = workspace
     weatherPart = part
 
@@ -296,28 +604,28 @@ local function setWeatherMode(mode)
     pe.EmissionDirection = Enum.NormalId.Bottom
 
     if mode == "Hujan (Rain)" then
-        -- Hujan deras multi-emitter ala DiiHub_Grafik (partikel garis air tajam + responsif HP/PC)
-        local emitterCount = isMobile and 1 or 3
-        local rainRate = isMobile and 100 or 320
+        -- Hujan SANGAT LEBAT & TEBAL (5 emitter PC / 2 Mobile + cipratan tanah + efek becek genangan air)
+        local emitterCount = isMobile and 2 or 5
+        local rainRate = isMobile and 190 or 480
         local function applyRainStyle(em)
             em.EmissionDirection = Enum.NormalId.Bottom
-            em.Color = ColorSequence.new(Color3.fromRGB(190, 205, 225))
+            em.Color = ColorSequence.new(Color3.fromRGB(205, 220, 238))
             em.Transparency = NumberSequence.new({
                 NumberSequenceKeypoint.new(0, 1),
-                NumberSequenceKeypoint.new(0.1, 0.42),
-                NumberSequenceKeypoint.new(0.85, 0.42),
+                NumberSequenceKeypoint.new(0.08, 0.22),
+                NumberSequenceKeypoint.new(0.88, 0.25),
                 NumberSequenceKeypoint.new(1, 1),
             })
-            em.Size = NumberSequence.new(0.42)
-            em.Squash = NumberSequence.new(3)
-            em.Rotation = NumberRange.new(-6, 6)
-            em.Speed = NumberRange.new(70, 90)
-            em.Acceleration = Vector3.new(0, -40, 0)
+            em.Size = NumberSequence.new(0.56)
+            em.Squash = NumberSequence.new(3.6)
+            em.Rotation = NumberRange.new(-5, 5)
+            em.Speed = NumberRange.new(78, 102)
+            em.Acceleration = Vector3.new(0, -48, 0)
             em.Lifetime = NumberRange.new(0.45, 0.62)
             em.Rate = rainRate
-            em.SpreadAngle = Vector2.new(3, 3)
-            em.LightInfluence = 0.6
-            em.LightEmission = 0.12
+            em.SpreadAngle = Vector2.new(3.5, 3.5)
+            em.LightInfluence = 0.55
+            em.LightEmission = 0.16
         end
         applyRainStyle(pe)
         for idx = 2, emitterCount do
@@ -326,6 +634,43 @@ local function setWeatherMode(mode)
             applyRainStyle(extra)
             extra.Parent = part
         end
+
+        -- Layer cipratan air & embun tipis di permukaan tanah sekitar player
+        local sp = Instance.new("Part")
+        sp.Name = "KurooRainSplashEmitter"
+        sp.Anchored = true
+        sp.CanCollide = false
+        sp.CanTouch = false
+        sp.CanQuery = false
+        sp.Transparency = 1
+        sp.Size = Vector3.new(65, 0.5, 65)
+        sp.Parent = workspace
+        weatherSplashPart = sp
+
+        local spe = Instance.new("ParticleEmitter")
+        spe.Name = "KurooRainSplash"
+        spe.EmissionDirection = Enum.NormalId.Top
+        spe.Color = ColorSequence.new(Color3.fromRGB(200, 218, 235))
+        spe.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.35),
+            NumberSequenceKeypoint.new(0.7, 0.65),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+        spe.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.14),
+            NumberSequenceKeypoint.new(0.5, 0.28),
+            NumberSequenceKeypoint.new(1, 0.08),
+        })
+        spe.Speed = NumberRange.new(3.5, 7.5)
+        spe.Acceleration = Vector3.new(0, -24, 0)
+        spe.Lifetime = NumberRange.new(0.22, 0.38)
+        spe.SpreadAngle = Vector2.new(45, 45)
+        spe.Rate = isMobile and 45 or 140
+        spe.Parent = sp
+
+        -- Aktifkan genangan becek & suara hujan deras
+        RainPuddles.Start()
+        SeasonAudio.Play("HeavyRain")
     elseif mode == "Snowfall (Salju)" then
         -- Built-in Roblox sparkle/snowflake texture (100% pasti tampil di semua executor!)
         pe.Texture = "rbxasset://textures/particles/sparkles_main.dds"
@@ -400,6 +745,9 @@ local function setWeatherMode(mode)
         if not basePos then return end
 
         weatherPart.CFrame = CFrame.new(basePos.X, basePos.Y + 26, basePos.Z)
+        if weatherSplashPart and weatherSplashPart.Parent then
+            weatherSplashPart.CFrame = CFrame.new(basePos.X, basePos.Y - 2.6, basePos.Z)
+        end
 
         if #Snow3D.flakes > 0 then
             for _, fl in ipairs(Snow3D.flakes) do
@@ -847,6 +1195,8 @@ local function disableSeasonMode(instant)
     clearSeasonGifts()
     if Season._StopZoo then pcall(Season._StopZoo) end
     if Season._RestoreWet then pcall(Season._RestoreWet) end
+    RainPuddles.Stop()
+    SeasonAudio.Stop(instant == true)
     VisualEnv.SetCinematicBorder(false, instant == true)
     restoreSeasonMap(instant == true)
     resetAllVisualShaders()
@@ -1306,8 +1656,9 @@ local function applySeasonMode(modeName)
         end
         applySkyShaderPreset("Christmas Winter")
 
-        -- 2. Hujan Salju Kristal (Model Salju 2-Layer)
+        -- 2. Hujan Salju Kristal (Model Salju 2-Layer) + Suara Angin Dingin
         setWeatherMode("Snowfall (Salju)")
+        SeasonAudio.Play("WinterWind")
 
         -- 3. Ubah Warna Terrain (Tanah & Rumput 3D jadi Putih Salju Instan!)
         local terrain = workspace:FindFirstChildOfClass("Terrain")
@@ -1437,7 +1788,8 @@ local function applySeasonMode(modeName)
         Lighting.FogStart = 12
         Lighting.FogEnd   = 240
         VisualEnv.SetCinematicBorder(true, false)
-        notify("Season Mode", "Musim Kabut aktif! (Cinematic Border + Sunset Hijau Gelap)", 2.5)
+        SeasonAudio.Play("MistWind")
+        notify("Season Mode", "Musim Kabut aktif! (Cinematic Border + Sunset Hijau Gelap + Angin Kabut)", 2.5)
     end
 end
 
@@ -1466,6 +1818,25 @@ seasonDropdown = sectionSeason:AddDropdown({
     Callback = function(modeName)
         if isSyncingSeasonUI then return end
         Season.Apply(modeName)
+    end,
+})
+
+sectionSeason:AddToggle({
+    Name = "Season Ambient Sound",
+    Desc = "Suara angin dingin (Christmas), hujan deras & angin kabut",
+    Default = true,
+    Callback = function(state)
+        SeasonAudio.SetEnabled(state)
+    end,
+})
+
+sectionSeason:AddSlider({
+    Name = "Ambient Volume",
+    Min = 0,
+    Max = 100,
+    Default = 45,
+    Callback = function(val)
+        SeasonAudio.SetVolume(val)
     end,
 })
 
@@ -1664,6 +2035,8 @@ sectionTheme:AddColorPicker({
             end
         end)
         pcall(function()
+            RainPuddles.Stop()
+            SeasonAudio.Stop(true)
             VisualEnv.ResetAll(true)
             VisualEnv.SetCinematicBorder(false, true)
         end)
