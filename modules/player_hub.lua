@@ -174,37 +174,29 @@ return function(ctx)
         layout.Padding = UDim.new(0, 6)
         layout.Parent = pill
 
-        -- Ikon Bulat di sebelah kiri
-        if iconAsset ~= "" then
-            local img = Instance.new("ImageLabel")
-            img.Name = "Icon"
-            img.Size = UDim2.fromOffset(22, 22)
-            img.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
-            img.BackgroundTransparency = 0
-            img.Image = iconAsset
-            img.ScaleType = Enum.ScaleType.Crop
-            img.LayoutOrder = 1
-            img.Parent = pill
+        -- Ikon Bulat Avatar Player di sebelah kiri
+        local img = Instance.new("ImageLabel")
+        img.Name = "AvatarIcon"
+        img.Size = UDim2.fromOffset(22, 22)
+        img.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+        img.BackgroundTransparency = 0
+        img.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(plr.UserId) .. "&w=100&h=100"
+        img.ScaleType = Enum.ScaleType.Crop
+        img.LayoutOrder = 1
+        img.Parent = pill
 
-            local imgCorner = Instance.new("UICorner")
-            imgCorner.CornerRadius = UDim.new(1, 0)
-            imgCorner.Parent = img
-        else
-            local badge = Instance.new("TextLabel")
-            badge.Name = "IconFallback"
-            badge.Size = UDim2.fromOffset(22, 22)
-            badge.BackgroundColor3 = isOwner and Color3.fromRGB(255, 204, 51) or Color3.fromRGB(230, 0, 18)
-            badge.Text = "K"
-            badge.TextColor3 = isOwner and Color3.fromRGB(18, 12, 4) or Color3.fromRGB(255, 255, 255)
-            badge.Font = Enum.Font.GothamBlack
-            badge.TextSize = 13
-            badge.LayoutOrder = 1
-            badge.Parent = pill
+        local imgCorner = Instance.new("UICorner")
+        imgCorner.CornerRadius = UDim.new(1, 0)
+        imgCorner.Parent = img
 
-            local bCorner = Instance.new("UICorner")
-            bCorner.CornerRadius = UDim.new(1, 0)
-            bCorner.Parent = badge
-        end
+        task.spawn(function()
+            local okThumb, thumbUrl = pcall(function()
+                return Players:GetUserThumbnailAsync(plr.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+            end)
+            if okThumb and type(thumbUrl) == "string" and thumbUrl ~= "" and img and img.Parent then
+                img.Image = thumbUrl
+            end
+        end)
 
         -- Badge Emas "OWNER" khusus untuk KurooNeko874 & KurooNeko1140
         if isOwner then

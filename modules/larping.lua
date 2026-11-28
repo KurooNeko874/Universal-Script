@@ -254,7 +254,6 @@ local PresetItems = loadRemoteData(KUROO_DATA_BASE .. "/larping_items.lua", {})
 local ActiveItems = {}        -- [itemName] = entry (untuk LocalPlayer)
 local ItemConfigs = {}        -- [itemName] = transform config
 local SelectedLarpItem = "8-Bit Royal Crown"
-local OtherPlayerItems = {}   -- [Player] = { Entries = { [itemName] = entry }, Headless = bool, CharConn = RBXScriptConnection }
 
 local function GetDefaultTransform()
     return {
@@ -625,127 +624,6 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     end
 end)
 
--- ========== APPLY / RESET LARPING ITEM KE PLAYER LAIN ==========
-local function clearOtherPlayerItems(targetPlayer, silent)
-    if not targetPlayer then return end
-    local data = OtherPlayerItems[targetPlayer]
-    if data then
-        if data.CharConn then
-            data.CharConn:Disconnect()
-            data.CharConn = nil
-        end
-        for _, entry in pairs(data.Entries) do
-            if entry.Model then
-                pcall(function() entry.Model:Destroy() end)
-            end
-        end
-        if data.Headless and targetPlayer.Character then
-            applyHeadlessToChar(targetPlayer.Character, false)
-        end
-        OtherPlayerItems[targetPlayer] = nil
-    end
-
-    -- Bersihkan juga sisa model KurooLarp_ jika ada
-    if targetPlayer.Character then
-        for _, child in ipairs(targetPlayer.Character:GetChildren()) do
-            if child:IsA("Model") and string.sub(child.Name, 1, 10) == "KurooLarp_" then
-                pcall(function() child:Destroy() end)
-            end
-        end
-    end
-
-    if not silent then
-        notify("Larping Player", "Item di " .. targetPlayer.Name .. " berhasil di-reset!", 2)
-    end
-end
-
-local function applyLarpingToPlayer(targetUsername)
-    local targetPlayer = findPlayerByPrefix(targetUsername, true)
-    if not targetPlayer then
-        notify("Larping Error", "Player tidak ditemukan!", 2)
-        return
-    end
-    if not targetPlayer.Character or not targetPlayer.Character:FindFirstChild("Head") then
-        notify("Larping Error", "Karakter " .. targetPlayer.Name .. " belum siap!", 2)
-        return
-    end
-
-    -- Ambil snapshot semua item aktif beserta modifikasinya saat ini
-    local snapshotItems = {}
-    for _, entry in pairs(ActiveItems) do
-        if entry.ItemData then
-            table.insert(snapshotItems, {
-                ItemData = entry.ItemData,
-                Config   = CloneTransform(entry.Config),
-            })
-        end
-    end
-
-    if #snapshotItems == 0 and not headlessEnabled then
-        notify("Larping Info", "Belum ada item aktif di karaktermu untuk di-apply!", 2)
-        return
-    end
-
-    -- Bersihkan item lama di target sebelum memasang yang baru
-    clearOtherPlayerItems(targetPlayer, true)
-
-    local playerData = {
-        Entries  = {},
-        Snapshot = snapshotItems,
-        Headless = headlessEnabled,
-        CharConn = nil,
-    }
-    OtherPlayerItems[targetPlayer] = playerData
-
-    for _, item in ipairs(snapshotItems) do
-        AttachVisualItemToCharacter(targetPlayer.Character, item.ItemData, item.Config, playerData.Entries)
-    end
-
-    if playerData.Headless then
-        applyHeadlessToChar(targetPlayer.Character, true)
-    end
-
-    -- Otomatis pasang ulang jika player target respawn
-    playerData.CharConn = targetPlayer.CharacterAdded:Connect(function(newChar)
-        newChar:WaitForChild("Head", 10)
-        task.wait(0.5)
-        if OtherPlayerItems[targetPlayer] ~= playerData then return end
-        playerData.Entries = {}
-        for _, item in ipairs(playerData.Snapshot) do
-            AttachVisualItemToCharacter(newChar, item.ItemData, item.Config, playerData.Entries)
-        end
-        if playerData.Headless then
-            applyHeadlessToChar(newChar, true)
-        end
-    end)
-
-    notify("Larping Player", "Berhasil apply ke " .. targetPlayer.Name .. " (" .. #snapshotItems .. " item)", 2)
-end
-
-local function resetLarpingOnPlayer(targetUsername)
-    local targetPlayer = findPlayerByPrefix(targetUsername, true)
-    if not targetPlayer then
-        notify("Larping Error", "Player tidak ditemukan!", 2)
-        return
-    end
-    clearOtherPlayerItems(targetPlayer, false)
-end
-
-local function resetAllOtherPlayersLarping()
-    local count = 0
-    for player, _ in pairs(OtherPlayerItems) do
-        clearOtherPlayerItems(player, true)
-        count = count + 1
-    end
-    notify("Larping Player", "Semua item di " .. count .. " player lain telah di-reset!", 2)
-end
-
-Players.PlayerRemoving:Connect(function(player)
-    if OtherPlayerItems[player] then
-        clearOtherPlayerItems(player, true)
-    end
-end)
-
 -- ========== Tab 4: Larping (Visual) ==========
 local tabLarping = window:AddTab({ Name = "Larping (Visual)" })
 
@@ -986,38 +864,6 @@ sectionLarpAdjust:AddButton({
         end
         syncLarpSlidersToItem(SelectedLarpItem)
         notify("Larping Visual", "Transform " .. SelectedLarpItem .. " di-reset.", 2)
-    end,
-})
-
--- Section: Apply Larping Item ke Player Lain
-local sectionLarpOther = tabLarping:AddSection({ Name = "Apply Item ke Player Lain" })
-
-local larpTargetInput = sectionLarpOther:AddInput({
-    Name        = "Target Username",
-    Placeholder = "Ketik username player...",
-    Callback    = function(text)
-        applyLarpingToPlayer(text)
-    end,
-})
-
-sectionLarpOther:AddButton({
-    Name     = "Apply Item ke Player",
-    Callback = function()
-        applyLarpingToPlayer(larpTargetInput:Get())
-    end,
-})
-
-sectionLarpOther:AddButton({
-    Name     = "Reset Item di Player Target",
-    Callback = function()
-        resetLarpingOnPlayer(larpTargetInput:Get())
-    end,
-})
-
-sectionLarpOther:AddButton({
-    Name     = "Reset Item di Semua Player Lain",
-    Callback = function()
-        resetAllOtherPlayersLarping()
     end,
 })
 
