@@ -288,20 +288,36 @@ local function setWeatherMode(mode)
     pe.EmissionDirection = Enum.NormalId.Bottom
 
     if mode == "Hujan (Rain)" then
-        pe.Texture = "rbxassetid://241876428"
-        pe.Color = ColorSequence.new(Color3.fromRGB(185, 215, 255))
-        pe.Transparency = NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 0.35),
-            NumberSequenceKeypoint.new(0.85, 0.45),
-            NumberSequenceKeypoint.new(1, 1),
-        })
-        pe.Size = NumberSequence.new(0.18)
-        pe.Squash = NumberSequence.new(2.4)
-        pe.Speed = NumberRange.new(58, 78)
-        pe.Lifetime = NumberRange.new(0.85, 1.2)
-        pe.Rate = 280
-        pe.SpreadAngle = Vector2.new(4, 4)
-        pe.LightEmission = 0.2
+        -- Hujan deras multi-emitter ala DiiHub_Grafik (partikel garis air tajam + responsif HP/PC)
+        local emitterCount = isMobile and 1 or 3
+        local rainRate = isMobile and 100 or 320
+        local function applyRainStyle(em)
+            em.EmissionDirection = Enum.NormalId.Bottom
+            em.Color = ColorSequence.new(Color3.fromRGB(190, 205, 225))
+            em.Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 1),
+                NumberSequenceKeypoint.new(0.1, 0.42),
+                NumberSequenceKeypoint.new(0.85, 0.42),
+                NumberSequenceKeypoint.new(1, 1),
+            })
+            em.Size = NumberSequence.new(0.42)
+            em.Squash = NumberSequence.new(3)
+            em.Rotation = NumberRange.new(-6, 6)
+            em.Speed = NumberRange.new(70, 90)
+            em.Acceleration = Vector3.new(0, -40, 0)
+            em.Lifetime = NumberRange.new(0.45, 0.62)
+            em.Rate = rainRate
+            em.SpreadAngle = Vector2.new(3, 3)
+            em.LightInfluence = 0.6
+            em.LightEmission = 0.12
+        end
+        applyRainStyle(pe)
+        for idx = 2, emitterCount do
+            local extra = Instance.new("ParticleEmitter")
+            extra.Name = "KurooWeatherRain_" .. tostring(idx)
+            applyRainStyle(extra)
+            extra.Parent = part
+        end
     elseif mode == "Snowfall (Salju)" then
         -- Built-in Roblox sparkle/snowflake texture (100% pasti tampil di semua executor!)
         pe.Texture = "rbxasset://textures/particles/sparkles_main.dds"
@@ -642,9 +658,411 @@ local function disableSeasonMode(instant)
     activeSeasonMode = "Normal (OFF)"
     Season.Active = "Normal (OFF)"
     clearSeasonGifts()
+    if Season._StopZoo then pcall(Season._StopZoo) end
+    if Season._RestoreWet then pcall(Season._RestoreWet) end
     restoreSeasonMap(instant == true)
     resetAllVisualShaders()
 end
+
+-- ===== TANAH BASAH (efek Musim Hujan: gelap + mengkilap, 100% bisa di-reset) =====
+local wetGround = { Parts = {}, Terrain = {}, Conn = nil, Token = 0, S = 1 }
+local WET_MATS = {
+    [Enum.Material.Grass] = true, [Enum.Material.LeafyGrass] = true, [Enum.Material.Ground] = true,
+    [Enum.Material.Mud] = true, [Enum.Material.Sand] = true, [Enum.Material.Sandstone] = true,
+    [Enum.Material.Asphalt] = true, [Enum.Material.Pavement] = true, [Enum.Material.Cobblestone] = true,
+}
+local WET_TERRAIN = {
+    Enum.Material.Grass, Enum.Material.LeafyGrass, Enum.Material.Ground, Enum.Material.Mud,
+    Enum.Material.Sand, Enum.Material.Sandstone, Enum.Material.Rock, Enum.Material.Slate,
+    Enum.Material.Asphalt, Enum.Material.Pavement, Enum.Material.Cobblestone,
+}
+
+local function wetColor(c, s)
+    local k = 1 - 0.38 * s
+    return Color3.new(c.R * k * 0.96, c.G * k * 0.98, c.B * k)
+end
+
+local function wetifyPart(d)
+    if not d:IsA("BasePart") or d:IsA("Terrain") then return end
+    if wetGround.Parts[d] or d.Transparency > 0.9 then return end
+    if d:FindFirstChildOfClass("SurfaceAppearance") then return end
+    local flatLarge = d.Size.Y <= 6 and d.Size.X >= 20 and d.Size.Z >= 20
+    if not (WET_MATS[d.Material] or flatLarge) then return end
+    if isCharacterDescendant(d) then return end
+    wetGround.Parts[d] = { d.Color, d.Reflectance }
+    pcall(function()
+        d.Color = wetColor(d.Color, wetGround.S)
+        d.Reflectance = math.clamp(math.max(d.Reflectance, 0.06 + 0.16 * wetGround.S), 0, 0.3)
+    end)
+end
+
+local function restoreWetGround()
+    wetGround.Token = wetGround.Token + 1
+    if wetGround.Conn then wetGround.Conn:Disconnect(); wetGround.Conn = nil end
+    for part, orig in pairs(wetGround.Parts) do
+        if part and part.Parent then
+            pcall(function()
+                part.Color = orig[1]
+                part.Reflectance = orig[2]
+            end)
+        end
+    end
+    local terrain = workspace:FindFirstChildOfClass("Terrain")
+    if terrain then
+        for mat, col in pairs(wetGround.Terrain) do
+            pcall(function() terrain:SetMaterialColor(mat, col) end)
+        end
+    end
+    wetGround = { Parts = {}, Terrain = {}, Conn = nil, Token = wetGround.Token, S = 1 }
+end
+Season._RestoreWet = restoreWetGround
+
+local function applyWetGround(strength)
+    restoreWetGround()
+    wetGround.S = strength or 1
+    local token = wetGround.Token
+    local terrain = workspace:FindFirstChildOfClass("Terrain")
+    if terrain then
+        for _, mat in ipairs(WET_TERRAIN) do
+            pcall(function()
+                local orig = terrain:GetMaterialColor(mat)
+                wetGround.Terrain[mat] = orig
+                terrain:SetMaterialColor(mat, wetColor(orig, wetGround.S))
+            end)
+        end
+    end
+    wetGround.Conn = workspace.DescendantAdded:Connect(wetifyPart)
+    task.spawn(function()
+        local n = 0
+        for _, d in ipairs(workspace:GetDescendants()) do
+            if wetGround.Token ~= token then return end
+            wetifyPart(d)
+            n = n + 1
+            if n % 1200 == 0 then task.wait() end
+        end
+    end)
+end
+
+-- ===== CHRISTMAS ZOO: 8 SNOWMAN + 5 RUSA BERJALAN + 1 RUDOLPH PENGIKUT =====
+local XmasZoo = (function()
+    local Z = { Folder = nil, Conn = nil, Animals = {}, Pet = nil, PetCF = nil, Params = nil, LastChar = nil }
+    local rng = Random.new()
+    local TAU = math.pi * 2
+    local function rgb(r, g, b) return Color3.fromRGB(r, g, b) end
+
+    local function mkPart(parent, name, size, color, mat, shape)
+        local p = Instance.new("Part")
+        p.Name, p.Size, p.Color = name, size, color
+        p.Material = mat or Enum.Material.SmoothPlastic
+        if shape then p.Shape = shape end
+        p.Anchored, p.CanCollide, p.CanTouch, p.CanQuery, p.Massless = false, false, false, false, true
+        p.TopSurface, p.BottomSurface = Enum.SurfaceType.Smooth, Enum.SurfaceType.Smooth
+        p.Parent = parent
+        return p
+    end
+
+    local function mkWeld(p0, p1, c0)
+        local w = Instance.new("Weld")
+        w.Part0, w.Part1, w.C0 = p0, p1, c0 or CFrame.new()
+        w.Parent = p0
+        return w
+    end
+
+    local function setFilter()
+        local list = { Z.Folder }
+        if Z.Pet then list[#list + 1] = Z.Pet end
+        if LocalPlayer.Character then list[#list + 1] = LocalPlayer.Character end
+        if seasonGiftsFolder then list[#list + 1] = seasonGiftsFolder end
+        if Snow3D.folder then list[#list + 1] = Snow3D.folder end
+        Z.Params.FilterDescendantsInstances = list
+        Z.LastChar = LocalPlayer.Character
+    end
+
+    local function groundAt(x, z, refY)
+        local res = workspace:Raycast(Vector3.new(x, refY + 10, z), Vector3.new(0, -140, 0), Z.Params)
+        if res and res.Material ~= Enum.Material.Water then return res.Position.Y end
+        return nil
+    end
+
+    local function findSpot(center, rmin, rmax)
+        for _ = 1, 12 do
+            local ang = rng:NextNumber(0, TAU)
+            local r = rng:NextNumber(rmin, rmax)
+            local x, z = center.X + math.cos(ang) * r, center.Z + math.sin(ang) * r
+            local gy = groundAt(x, z, center.Y)
+            if gy and math.abs(gy - center.Y) < 16 then return Vector3.new(x, gy, z) end
+        end
+        return nil
+    end
+
+    local function buildSnowman()
+        local white, black = rgb(248, 250, 255), rgb(25, 25, 28)
+        local m = Instance.new("Model")
+        m.Name = "KurooSnowman"
+        local base = mkPart(m, "Base", Vector3.new(3.4, 3.4, 3.4), white, Enum.Material.Snow, Enum.PartType.Ball)
+        base.Anchored = true
+        m.PrimaryPart = base
+        local mid = mkPart(m, "Mid", Vector3.new(2.5, 2.5, 2.5), white, Enum.Material.Snow, Enum.PartType.Ball)
+        mkWeld(base, mid, CFrame.new(0, 2.3, 0))
+        local head = mkPart(m, "Head", Vector3.new(1.8, 1.8, 1.8), white, Enum.Material.Snow, Enum.PartType.Ball)
+        mkWeld(base, head, CFrame.new(0, 4.1, 0))
+        for _, s in ipairs({ -1, 1 }) do
+            local eye = mkPart(m, "Eye", Vector3.new(0.2, 0.2, 0.2), black, nil, Enum.PartType.Ball)
+            mkWeld(head, eye, CFrame.new(s * 0.32, 0.22, -0.8))
+        end
+        local nose = mkPart(m, "Nose", Vector3.new(0.9, 0.22, 0.22), rgb(255, 140, 30), nil, Enum.PartType.Cylinder)
+        mkWeld(head, nose, CFrame.new(0, -0.05, -1.0) * CFrame.Angles(0, math.rad(90), 0))
+        for i, y in ipairs({ 2.7, 2.3, 1.9 }) do
+            local b = mkPart(m, "Button", Vector3.new(0.3, 0.3, 0.3), black, nil, Enum.PartType.Ball)
+            mkWeld(base, b, CFrame.new(0, y, i == 2 and -1.2 or -1.15))
+        end
+        local scarf = mkPart(m, "Scarf", Vector3.new(0.4, 2.0, 2.0), rgb(210, 25, 38), Enum.Material.Fabric, Enum.PartType.Cylinder)
+        mkWeld(base, scarf, CFrame.new(0, 3.45, 0) * CFrame.Angles(0, 0, math.rad(90)))
+        local brim = mkPart(m, "Brim", Vector3.new(0.15, 1.9, 1.9), black, nil, Enum.PartType.Cylinder)
+        mkWeld(base, brim, CFrame.new(0, 4.95, 0) * CFrame.Angles(0, 0, math.rad(90)))
+        local crown = mkPart(m, "Crown", Vector3.new(1.0, 1.2, 1.2), black, nil, Enum.PartType.Cylinder)
+        mkWeld(base, crown, CFrame.new(0, 5.5, 0) * CFrame.Angles(0, 0, math.rad(90)))
+        for _, side in ipairs({ -1, 1 }) do
+            local arm = mkPart(m, "Arm", Vector3.new(1.9, 0.18, 0.18), rgb(92, 62, 38), Enum.Material.Wood)
+            mkWeld(base, arm, CFrame.new(side * 1.05, 2.7, 0) * CFrame.Angles(0, 0, side * math.rad(30)) * CFrame.new(side * 0.95, 0, 0))
+        end
+        return m
+    end
+
+    local function buildDeer()
+        local brown, dark, cream = rgb(150, 105, 66), rgb(112, 76, 46), rgb(236, 224, 205)
+        local fab, wood = Enum.Material.Fabric, Enum.Material.Wood
+        local m = Instance.new("Model")
+        m.Name = "KurooDeer"
+        local body = mkPart(m, "Body", Vector3.new(1.4, 1.3, 2.8), brown, fab)
+        body.Anchored = true
+        m.PrimaryPart = body
+        local neck = mkPart(m, "Neck", Vector3.new(0.6, 1.4, 0.6), brown, fab)
+        mkWeld(body, neck, CFrame.new(0, 0.7, -1.25) * CFrame.Angles(math.rad(-35), 0, 0))
+        local head = mkPart(m, "Head", Vector3.new(0.7, 0.7, 1.1), brown, fab)
+        mkWeld(body, head, CFrame.new(0, 1.35, -2.1) * CFrame.Angles(math.rad(15), 0, 0))
+        local nose = mkPart(m, "Nose", Vector3.new(0.28, 0.28, 0.28), rgb(20, 20, 20), nil, Enum.PartType.Ball)
+        mkWeld(head, nose, CFrame.new(0, -0.05, -0.6))
+        for _, s in ipairs({ -1, 1 }) do
+            local ear = mkPart(m, "Ear", Vector3.new(0.12, 0.5, 0.28), dark, fab)
+            mkWeld(head, ear, CFrame.new(s * 0.38, 0.4, 0.25) * CFrame.Angles(0, 0, -s * math.rad(35)))
+            local ant = mkPart(m, "Antler", Vector3.new(0.1, 1.1, 0.1), rgb(205, 185, 150), wood)
+            mkWeld(head, ant, CFrame.new(s * 0.22, 0.85, 0.1) * CFrame.Angles(0, 0, -s * math.rad(18)))
+            local br = mkPart(m, "AntlerBranch", Vector3.new(0.08, 0.55, 0.08), rgb(205, 185, 150), wood)
+            mkWeld(head, br, CFrame.new(s * 0.34, 0.95, -0.1) * CFrame.Angles(math.rad(-30), 0, -s * math.rad(50)))
+        end
+        local tail = mkPart(m, "Tail", Vector3.new(0.3, 0.4, 0.25), cream, fab)
+        mkWeld(body, tail, CFrame.new(0, 0.4, 1.45))
+        local legs = {}
+        for _, dx in ipairs({ -0.5, 0.5 }) do
+            for _, dz in ipairs({ -1.0, 1.0 }) do
+                local leg = mkPart(m, "Leg", Vector3.new(0.32, 1.8, 0.32), dark, fab)
+                legs[#legs + 1] = { W = mkWeld(body, leg), dx = dx, dz = dz, hy = -0.65, len = 1.8 }
+            end
+        end
+        return m, legs, 2.45
+    end
+
+    local function buildPetRudolph()
+        local m = Instance.new("Model")
+        m.Name = "KurooRudolph"
+        local body = mkPart(m, "Body", Vector3.new(1.5, 1.05, 2.1), rgb(125, 82, 50), Enum.Material.Fabric)
+        body.Anchored = true
+        local head = mkPart(m, "Head", Vector3.new(0.78, 0.78, 0.88), rgb(135, 90, 56), Enum.Material.Fabric)
+        head.Anchored = true
+        local nose = mkPart(m, "Nose", Vector3.new(0.3, 0.3, 0.3), rgb(230, 20, 30), Enum.Material.Neon, Enum.PartType.Ball)
+        nose.Anchored = true
+        local pl = Instance.new("PointLight")
+        pl.Color, pl.Range, pl.Brightness = rgb(255, 50, 50), 6, 1.8
+        pl.Parent = nose
+        for i, side in ipairs({ -1, 1 }) do
+            local ant = mkPart(m, "Antler" .. i, Vector3.new(0.14, 0.7, 0.14), rgb(95, 65, 38), Enum.Material.Wood)
+            ant.Anchored = true
+            ant:SetAttribute("Side", side)
+        end
+        for i, dx in ipairs({ -0.52, 0.52 }) do
+            for j, dz in ipairs({ -0.75, 0.75 }) do
+                local leg = mkPart(m, "Leg" .. i .. j, Vector3.new(0.22, 0.95, 0.22), rgb(100, 68, 42), Enum.Material.Fabric)
+                leg.Anchored = true
+                leg:SetAttribute("DX", dx)
+                leg:SetAttribute("DZ", dz)
+            end
+        end
+        m.PrimaryPart = body
+        return m
+    end
+
+    local function poseAnimal(a)
+        local bob = math.sin(a.Phase * 2) * 0.05 * a.Mv
+        for _, l in ipairs(a.Legs) do
+            local off = ((l.dx * l.dz) > 0) and 0 or math.pi
+            local ang = math.sin(a.Phase + off) * a.Amp * a.Mv
+            l.W.C0 = CFrame.new(l.dx, l.hy, l.dz) * CFrame.Angles(ang, 0, 0) * CFrame.new(0, -l.len / 2, 0)
+        end
+        a.Model:PivotTo(CFrame.new(a.Pos.X, a.Pos.Y + a.BodyH + bob, a.Pos.Z) * CFrame.Angles(0, a.Yaw, 0))
+    end
+
+    local function placeAnimal(a, center)
+        local spot = findSpot(center, 22, 85)
+        if not spot then return false end
+        a.Pos, a.GroundY, a.Good = spot, spot.Y, spot
+        a.Yaw = rng:NextNumber(0, TAU)
+        a.State, a.Timer, a.Mv = "idle", rng:NextNumber(0.5, 3.5), 0
+        return true
+    end
+
+    local function stepAnimal(a, dt, t, ppos)
+        if not a.Model.Parent then return end
+        if ppos and (a.Pos - ppos).Magnitude > 170 then
+            if placeAnimal(a, ppos) then poseAnimal(a) end
+            return
+        end
+        if a.State == "idle" then
+            a.Timer = a.Timer - dt
+            if a.Timer <= 0 then
+                local picked = false
+                for _ = 1, 6 do
+                    local ang = rng:NextNumber(0, TAU)
+                    local dist = rng:NextNumber(8, 24)
+                    local tx, tz = a.Pos.X + math.cos(ang) * dist, a.Pos.Z + math.sin(ang) * dist
+                    local gy = groundAt(tx, tz, a.Pos.Y)
+                    if gy and math.abs(gy - a.Pos.Y) < 6 then
+                        a.Target, a.State, picked = Vector3.new(tx, gy, tz), "walk", true
+                        break
+                    end
+                end
+                if not picked then a.Timer = 1.5 end
+            end
+        else
+            local to = Vector3.new(a.Target.X - a.Pos.X, 0, a.Target.Z - a.Pos.Z)
+            if to.Magnitude < 1.2 then
+                a.State, a.Timer = "idle", rng:NextNumber(2.0, 6.0)
+            else
+                local dir = to.Unit
+                local want = math.atan2(-dir.X, -dir.Z)
+                local diff = (want - a.Yaw + math.pi) % TAU - math.pi
+                a.Yaw = a.Yaw + math.clamp(diff, -3 * dt, 3 * dt)
+                if math.abs(diff) < 1.2 then
+                    local fx, fz = -math.sin(a.Yaw), -math.cos(a.Yaw)
+                    a.Pos = Vector3.new(a.Pos.X + fx * a.Speed * dt, a.Pos.Y, a.Pos.Z + fz * a.Speed * dt)
+                end
+            end
+        end
+        if t - a.LastRay > 0.1 then
+            a.LastRay = t
+            local gy = groundAt(a.Pos.X, a.Pos.Z, a.Pos.Y)
+            if gy and math.abs(gy - a.GroundY) < 7 then
+                a.GroundY, a.Good = gy, a.Pos
+            elseif a.Good then
+                a.Pos, a.State, a.Timer = a.Good, "idle", 1
+            end
+        end
+        a.Pos = Vector3.new(a.Pos.X, a.Pos.Y + (a.GroundY - a.Pos.Y) * math.min(dt * 10, 1), a.Pos.Z)
+        a.Mv = a.Mv + (((a.State == "walk") and 1 or 0) - a.Mv) * math.min(dt * 8, 1)
+        a.Phase = a.Phase + dt * a.Speed * 1.5 * (0.2 + 0.8 * a.Mv)
+        poseAnimal(a)
+    end
+
+    local function updatePet(t, dt)
+        local m = Z.Pet
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local body = m and m:FindFirstChild("Body")
+        if not (root and body) then return end
+        local targetCf = root.CFrame * CFrame.new(3.2, 0, 3.5)
+        local cur = Z.PetCF or body.CFrame
+        local alpha = 1 - math.exp(-dt * 3.2)
+        local newPos = cur.Position:Lerp(targetCf.Position, alpha)
+        local lookDir = targetCf.Position - newPos
+        local flat = Vector3.new(lookDir.X, 0, lookDir.Z)
+        local facing = flat.Magnitude > 0.1 and CFrame.lookAt(newPos, newPos + flat) or CFrame.new(newPos)
+        local bob = math.sin(t * 4) * 0.08
+        local finalCf = facing * CFrame.new(0, 1.5 + bob, 0)
+        Z.PetCF = finalCf
+        body.CFrame = finalCf
+        local head = m:FindFirstChild("Head")
+        if head then head.CFrame = finalCf * CFrame.new(0, 0.55, -1.25) end
+        local nose = m:FindFirstChild("Nose")
+        if nose then nose.CFrame = finalCf * CFrame.new(0, 0.5, -1.7) end
+        for i = 1, 2 do
+            local ant = m:FindFirstChild("Antler" .. i)
+            if ant then
+                local side = ant:GetAttribute("Side") or 1
+                ant.CFrame = finalCf * CFrame.new(0.25 * side, 0.98, -1.25) * CFrame.Angles(math.rad(20 * side), 0, math.rad(25 * side))
+            end
+        end
+        for i = 1, 2 do
+            for j = 1, 2 do
+                local leg = m:FindFirstChild("Leg" .. i .. j)
+                if leg then
+                    local dx, dz = leg:GetAttribute("DX") or 0, leg:GetAttribute("DZ") or 0
+                    local step = math.sin(t * 6 + (dx + dz) * 2) * 0.15
+                    leg.CFrame = finalCf * CFrame.new(dx, -0.52 + math.abs(step), dz)
+                end
+            end
+        end
+    end
+
+    function Z.Stop()
+        if Z.Conn then Z.Conn:Disconnect(); Z.Conn = nil end
+        if Z.Folder then pcall(function() Z.Folder:Destroy() end); Z.Folder = nil end
+        if Z.Pet then pcall(function() Z.Pet:Destroy() end); Z.Pet = nil end
+        Z.Animals, Z.PetCF = {}, nil
+    end
+
+    function Z.Start()
+        Z.Stop()
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+        Z.Folder = Instance.new("Folder")
+        Z.Folder.Name = "KurooSnowZoo"
+        Z.Folder.Parent = workspace
+        Z.Params = RaycastParams.new()
+        Z.Params.FilterType = Enum.RaycastFilterType.Exclude
+        Z.Params.RespectCanCollide = true
+
+        Z.Pet = buildPetRudolph()
+        Z.Pet:PivotTo(root.CFrame * CFrame.new(3, 0, 4))
+        Z.Pet.Parent = workspace
+        setFilter()
+
+        local c = root.Position
+        for _ = 1, 8 do
+            local spot = findSpot(c, 12, 75)
+            if spot then
+                local sm = buildSnowman()
+                local dx, dz = c.X - spot.X, c.Z - spot.Z
+                sm:PivotTo(CFrame.new(spot.X, spot.Y + 1.6, spot.Z) * CFrame.Angles(0, math.atan2(-dx, -dz) + rng:NextNumber(-0.5, 0.5), 0))
+                sm.Parent = Z.Folder
+            end
+        end
+        for _ = 1, 5 do
+            local m, legs, h = buildDeer()
+            local a = { Model = m, Legs = legs, BodyH = h, Phase = 0, Mv = 0, LastRay = 0, Speed = 7.5, Amp = 0.6 }
+            if placeAnimal(a, c) then
+                m.Parent = Z.Folder
+                poseAnimal(a)
+                Z.Animals[#Z.Animals + 1] = a
+            else
+                m:Destroy()
+            end
+        end
+
+        local t0 = os.clock()
+        Z.Conn = RunService.Heartbeat:Connect(function(dt)
+            dt = math.min(dt, 0.1)
+            local now = os.clock()
+            if LocalPlayer.Character ~= Z.LastChar then setFilter() end
+            local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local ppos = r and r.Position
+            for _, a in ipairs(Z.Animals) do
+                pcall(stepAnimal, a, dt, now, ppos)
+            end
+            pcall(updatePet, now - t0, dt)
+        end)
+    end
+    return Z
+end)()
+Season._StopZoo = XmasZoo.Stop
 
 local function applySeasonMode(modeName)
     seasonTaskId = seasonTaskId + 1
@@ -657,9 +1075,12 @@ local function applySeasonMode(modeName)
     end
 
     if modeName == "Christmas Winter" then
+        clearSeasonGifts()
+        pcall(XmasZoo.Stop)
+        pcall(restoreWetGround)
         activeSeasonMode = "Christmas Winter"
         Season.Active = "Christmas Winter"
-        notify("Season Mode", "Mengaktifkan Christmas Winter (Sky + Terrain + Salju)...", 2.5)
+        notify("Season Mode", "Mengaktifkan Christmas Winter (Sky + Salju 3D + Snowman + Rusa + Kado)...", 2.5)
 
         -- 1. Skybox Seamless + Winter Atmosphere + Lighting
         if not SkyShaderPresets["Christmas Winter"] then
@@ -740,11 +1161,45 @@ local function applySeasonMode(modeName)
                 end
             end
             if seasonTaskId == myTaskId then
-                -- 5. Spawn ~15 kado Natal random di atas tanah/terrain (secukupnya, tidak terlalu padat)
+                -- 5. Spawn ~15 kado Natal random + 8 Snowman + 5 Rusa berjalan + 1 Rudolph pengikut
                 spawnRandomChristmasGifts(15)
-                notify("Season Mode", "Christmas Winter aktif sepenuhnya! (Salju 3D + Kado Natal)", 2.5)
+                pcall(XmasZoo.Start)
+                notify("Season Mode", "Christmas Winter aktif! (Salju 3D, Snowman, Rusa & Kado)", 2.5)
             end
         end)
+    elseif modeName == "Musim Hujan" then
+        clearSeasonGifts()
+        pcall(XmasZoo.Stop)
+        restoreSeasonMap(true)
+        activeSeasonMode = "Musim Hujan"
+        Season.Active = "Musim Hujan"
+        notify("Season Mode", "Mengaktifkan Musim Hujan (Mendung + Hujan Deras + Tanah Basah)...", 2.5)
+
+        if not SkyShaderPresets["Musim Hujan"] then
+            SkyShaderPresets["Musim Hujan"] = {
+                ClockTime  = 15.0,
+                Brightness = 1.05,
+                Ambient    = Color3.fromRGB(80, 90, 105),
+                Outdoor    = Color3.fromRGB(100, 110, 125),
+                Exposure   = -0.3,
+                Atmosphere = {
+                    Density = 0.45,
+                    Offset  = 0.1,
+                    Color   = Color3.fromRGB(150, 160, 175),
+                    Decay   = Color3.fromRGB(100, 110, 125),
+                    Glare   = 0,
+                    Haze    = 2.4,
+                },
+                Bloom = { Intensity = 0.3, Size = 22, Threshold = 1.0 },
+                CC    = { Brightness = -0.02, Contrast = 0.12, Saturation = -0.3, TintColor = Color3.fromRGB(190, 203, 220) },
+                SunRays = { Intensity = 0.0, Spread = 0.5 },
+                Clouds = { Cover = 0.95, Density = 0.9, Color = Color3.fromRGB(120, 128, 140) },
+            }
+        end
+        applySkyShaderPreset("Musim Hujan")
+        setWeatherMode("Hujan (Rain)")
+        applyWetGround(1.0)
+        notify("Season Mode", "Musim Hujan aktif sepenuhnya!", 2.5)
     end
 end
 
@@ -762,10 +1217,11 @@ local seasonDropdown
 
 seasonDropdown = sectionSeason:AddDropdown({
     Name = "Season Preset",
-    Desc = "Ubah seluruh suasana map (Sky + Terrain + Part + Salju)",
+    Desc = "Ubah seluruh suasana map (Sky + Terrain + Efek Musim)",
     Options = {
         "Normal (OFF)",
         "Christmas Winter",
+        "Musim Hujan",
     },
     Default = "Normal (OFF)",
     Callback = function(modeName)
@@ -816,6 +1272,11 @@ skyDropdown = sectionShader:AddDropdown({
     Options = {
         "Default",
         "Realistic RTX Day",
+        "DLSS / Ultra RTX",
+        "Cinematic",
+        "Senja",
+        "Vibrant Anime",
+        "Cyberpunk Neon",
         "Classical Sunset Sky",
         "Pink Sky",
         "Cloudy Day Sky",

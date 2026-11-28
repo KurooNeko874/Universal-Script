@@ -190,4 +190,130 @@ return {
         SunRays = { Intensity = 0.1, Spread = 0.8 },
         Clouds = { Cover = 0.78, Density = 0.75, Color = Color3.fromRGB(238, 246, 255) },
     },
+
+    -- Musim Hujan (Mendung gelap, awan tebal, kabut hujan)
+    ["Musim Hujan"] = {
+        ClockTime  = 15.0,
+        Brightness = 1.05,
+        Ambient    = Color3.fromRGB(80, 90, 105),
+        Outdoor    = Color3.fromRGB(100, 110, 125),
+        Exposure   = -0.3,
+        Atmosphere = {
+            Density = 0.45,
+            Offset  = 0.1,
+            Color   = Color3.fromRGB(150, 160, 175),
+            Decay   = Color3.fromRGB(100, 110, 125),
+            Glare   = 0,
+            Haze    = 2.4,
+        },
+        Bloom = { Intensity = 0.3, Size = 22, Threshold = 1.0 },
+        CC    = { Brightness = -0.02, Contrast = 0.12, Saturation = -0.3, TintColor = Color3.fromRGB(190, 203, 220) },
+        SunRays = { Intensity = 0.0, Spread = 0.5 },
+        Clouds = { Cover = 0.95, Density = 0.9, Color = Color3.fromRGB(120, 128, 140) },
+    },
+
+    -- DLSS / Ultra RTX (Tajam, jernih, sinematik)
+    ["DLSS / Ultra RTX"] = {
+        ClockTime  = 14.5,
+        Brightness = 2.8,
+        Ambient    = Color3.fromRGB(125, 135, 150),
+        Outdoor    = Color3.fromRGB(165, 178, 196),
+        Exposure   = 0.22,
+        Atmosphere = {
+            Density = 0.22,
+            Offset  = 0.1,
+            Color   = Color3.fromRGB(198, 214, 236),
+            Decay   = Color3.fromRGB(124, 152, 192),
+            Glare   = 0.15,
+            Haze    = 0.7,
+        },
+        Bloom = { Intensity = 0.35, Size = 20, Threshold = 1.0 },
+        CC    = { Brightness = 0.02, Contrast = 0.22, Saturation = 0.26, TintColor = Color3.fromRGB(255, 251, 246) },
+        SunRays = { Intensity = 0.1, Spread = 0.8 },
+        Clouds = { Cover = 0.45, Density = 0.6, Color = Color3.fromRGB(248, 250, 255) },
+    },
+
+    -- Cinematic (Warna film hangat + SunRays)
+    ["Cinematic"] = {
+        ClockTime  = 17.2,
+        Brightness = 2.2,
+        Ambient    = Color3.fromRGB(120, 105, 95),
+        Outdoor    = Color3.fromRGB(175, 150, 130),
+        Exposure   = -0.15,
+        Atmosphere = {
+            Density = 0.28,
+            Offset  = 0.18,
+            Color   = Color3.fromRGB(255, 220, 185),
+            Decay   = Color3.fromRGB(215, 140, 95),
+            Glare   = 0.35,
+            Haze    = 1.5,
+        },
+        Bloom = { Intensity = 0.5, Size = 32, Threshold = 0.95 },
+        CC    = { Brightness = -0.02, Contrast = 0.24, Saturation = -0.06, TintColor = Color3.fromRGB(255, 236, 214) },
+        SunRays = { Intensity = 0.16, Spread = 0.85 },
+        Clouds = { Cover = 0.5, Density = 0.6, Color = Color3.fromRGB(255, 226, 200) },
+    },
+
+    -- Senja (Matahari terbenam oranye-pink)
+    ["Senja"] = {
+        ClockTime  = 18.2,
+        Brightness = 2.3,
+        Ambient    = Color3.fromRGB(120, 85, 95),
+        Outdoor    = Color3.fromRGB(165, 110, 115),
+        Exposure   = -0.05,
+        Atmosphere = {
+            Density = 0.3,
+            Offset  = 0.25,
+            Color   = Color3.fromRGB(255, 175, 120),
+            Decay   = Color3.fromRGB(255, 110, 95),
+            Glare   = 0.8,
+            Haze    = 1.6,
+        },
+        Bloom = { Intensity = 0.6, Size = 36, Threshold = 0.9 },
+        CC    = { Brightness = 0.02, Contrast = 0.18, Saturation = 0.12, TintColor = Color3.fromRGB(255, 200, 170) },
+        SunRays = { Intensity = 0.3, Spread = 1.0 },
+        Clouds = { Cover = 0.35, Density = 0.5, Color = Color3.fromRGB(255, 190, 160) },
+    },
+
+    -- Vibrant Anime (Warna pekat ceria)
+    ["Vibrant Anime"] = {
+        ClockTime  = 13.8,
+        Brightness = 2.6,
+        Ambient    = Color3.fromRGB(135, 145, 160),
+        Outdoor    = Color3.fromRGB(175, 185, 205),
+        Exposure   = 0.08,
+        Atmosphere = {
+            Density = 0.2,
+            Offset  = 0.15,
+            Color   = Color3.fromRGB(190, 220, 255),
+            Decay   = Color3.fromRGB(120, 170, 240),
+            Glare   = 0.25,
+            Haze    = 0.9,
+        },
+        Bloom = { Intensity = 0.3, Size = 24, Threshold = 1.1 },
+        CC    = { Brightness = 0.02, Contrast = 0.12, Saturation = 0.55, TintColor = Color3.fromRGB(255, 248, 245) },
+        SunRays = { Intensity = 0.12, Spread = 0.75 },
+        Clouds = { Cover = 0.4, Density = 0.5, Color = Color3.fromRGB(255, 255, 255) },
+    },
+
+    -- Cyberpunk Neon (Malam ungu-cyan + bloom neon)
+    ["Cyberpunk Neon"] = {
+        ClockTime  = 21.0,
+        Brightness = 1.2,
+        Ambient    = Color3.fromRGB(60, 30, 110),
+        Outdoor    = Color3.fromRGB(70, 40, 130),
+        Exposure   = 0.05,
+        Atmosphere = {
+            Density = 0.32,
+            Offset  = 0.1,
+            Color   = Color3.fromRGB(120, 60, 190),
+            Decay   = Color3.fromRGB(30, 15, 65),
+            Glare   = 0.3,
+            Haze    = 1.8,
+        },
+        Bloom = { Intensity = 1.0, Size = 40, Threshold = 0.8 },
+        CC    = { Brightness = 0.0, Contrast = 0.3, Saturation = 0.35, TintColor = Color3.fromRGB(220, 170, 255) },
+        SunRays = { Intensity = 0.05, Spread = 0.5 },
+        Clouds = { Cover = 0.35, Density = 0.5, Color = Color3.fromRGB(110, 65, 175) },
+    },
 }
