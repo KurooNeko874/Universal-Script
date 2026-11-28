@@ -13,6 +13,17 @@ return function(ctx)
     local DISCORD_INVITE = "https://discord.gg/3b2H9RXbS"
     local ICON_RAW_URL   = "https://raw.githubusercontent.com/KurooNeko874/Universal-Script/main/assets/kuroo-icon.png"
 
+    -- Daftar Username Owner (mendapat Tag Khusus Warna Emas "OWNER")
+    local OWNER_USERNAMES = {
+        ["kurooneko874"] = true,
+        ["kurooneko1140"] = true,
+    }
+
+    local function isOwnerPlayer(plr)
+        if not plr then return false end
+        return OWNER_USERNAMES[string.lower(tostring(plr.Name or ""))] == true
+    end
+
     -- Helper HTTP Request lintas executor
     local function getHttpRequest()
         return (typeof(request) == "function" and request)
@@ -111,6 +122,7 @@ return function(ctx)
         if rec.Gui then pcall(function() rec.Gui:Destroy() end) end
 
         local iconAsset = resolveKurooIcon()
+        local isOwner = isOwnerPlayer(plr)
 
         local bb = Instance.new("BillboardGui")
         bb.Name = "KurooTag_" .. tostring(plr.UserId)
@@ -121,8 +133,11 @@ return function(ctx)
         bb.LightInfluence = 0
         bb.MaxDistance = 300
         bb.StudsOffset = Vector3.new(0, 3.1, 0)
-        bb.Size = UDim2.fromOffset(220, 34)
+        bb.Size = UDim2.fromOffset(isOwner and 280 or 220, 34)
         bb.Parent = tagFolder
+
+        local baseBg = isOwner and Color3.fromRGB(22, 16, 8) or Color3.fromRGB(9, 9, 11)
+        local hoverBg = isOwner and Color3.fromRGB(44, 30, 12) or Color3.fromRGB(28, 12, 16)
 
         local pill = Instance.new("TextButton")
         pill.Name = "Capsule"
@@ -130,8 +145,8 @@ return function(ctx)
         pill.Position = UDim2.fromScale(0.5, 0.5)
         pill.AutomaticSize = Enum.AutomaticSize.X
         pill.Size = UDim2.fromOffset(0, 28)
-        pill.BackgroundColor3 = Color3.fromRGB(9, 9, 11)
-        pill.BackgroundTransparency = 0.12
+        pill.BackgroundColor3 = baseBg
+        pill.BackgroundTransparency = 0.1
         pill.AutoButtonColor = false
         pill.Text = ""
         pill.Parent = bb
@@ -141,8 +156,8 @@ return function(ctx)
         corner.Parent = pill
 
         local stroke = Instance.new("UIStroke")
-        stroke.Color = Color3.fromRGB(230, 0, 18)
-        stroke.Thickness = 1.6
+        stroke.Color = isOwner and Color3.fromRGB(255, 204, 51) or Color3.fromRGB(230, 0, 18)
+        stroke.Thickness = isOwner and 2.0 or 1.6
         stroke.Parent = pill
 
         local pad = Instance.new("UIPadding")
@@ -178,9 +193,9 @@ return function(ctx)
             local badge = Instance.new("TextLabel")
             badge.Name = "IconFallback"
             badge.Size = UDim2.fromOffset(22, 22)
-            badge.BackgroundColor3 = Color3.fromRGB(230, 0, 18)
+            badge.BackgroundColor3 = isOwner and Color3.fromRGB(255, 204, 51) or Color3.fromRGB(230, 0, 18)
             badge.Text = "K"
-            badge.TextColor3 = Color3.fromRGB(255, 255, 255)
+            badge.TextColor3 = isOwner and Color3.fromRGB(18, 12, 4) or Color3.fromRGB(255, 255, 255)
             badge.Font = Enum.Font.GothamBlack
             badge.TextSize = 13
             badge.LayoutOrder = 1
@@ -191,26 +206,50 @@ return function(ctx)
             bCorner.Parent = badge
         end
 
-        -- Nama Player di sebelah kanan ikon
+        -- Badge Emas "OWNER" khusus untuk KurooNeko874 & KurooNeko1140
+        if isOwner then
+            local ownerBadge = Instance.new("TextLabel")
+            ownerBadge.Name = "OwnerBadge"
+            ownerBadge.AutomaticSize = Enum.AutomaticSize.X
+            ownerBadge.Size = UDim2.fromOffset(0, 18)
+            ownerBadge.BackgroundColor3 = Color3.fromRGB(255, 204, 51)
+            ownerBadge.Text = "OWNER"
+            ownerBadge.TextColor3 = Color3.fromRGB(18, 12, 4)
+            ownerBadge.Font = Enum.Font.GothamBlack
+            ownerBadge.TextSize = 10
+            ownerBadge.LayoutOrder = 2
+            ownerBadge.Parent = pill
+
+            local obCorner = Instance.new("UICorner")
+            obCorner.CornerRadius = UDim.new(1, 0)
+            obCorner.Parent = ownerBadge
+
+            local obPad = Instance.new("UIPadding")
+            obPad.PaddingLeft = UDim.new(0, 6)
+            obPad.PaddingRight = UDim.new(0, 6)
+            obPad.Parent = ownerBadge
+        end
+
+        -- Nama Player di sebelah kanan ikon / badge
         local nameLbl = Instance.new("TextLabel")
         nameLbl.Name = "PlayerName"
         nameLbl.AutomaticSize = Enum.AutomaticSize.X
         nameLbl.Size = UDim2.fromOffset(0, 22)
         nameLbl.BackgroundTransparency = 1
         nameLbl.Text = plr.DisplayName
-        nameLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+        nameLbl.TextColor3 = isOwner and Color3.fromRGB(255, 224, 112) or Color3.fromRGB(255, 255, 255)
         nameLbl.Font = Enum.Font.GothamBold
         nameLbl.TextSize = 12
         nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-        nameLbl.LayoutOrder = 2
+        nameLbl.LayoutOrder = 3
         nameLbl.Parent = pill
 
         -- Hover effect ringan
         pill.MouseEnter:Connect(function()
-            pill.BackgroundColor3 = Color3.fromRGB(28, 12, 16)
+            pill.BackgroundColor3 = hoverBg
         end)
         pill.MouseLeave:Connect(function()
-            pill.BackgroundColor3 = Color3.fromRGB(9, 9, 11)
+            pill.BackgroundColor3 = baseBg
         end)
 
         -- Klik kapsul = Teleport otomatis ke player tersebut!
