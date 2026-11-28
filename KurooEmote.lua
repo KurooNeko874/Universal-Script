@@ -41,7 +41,7 @@ end
 -- ============================================================
 -- 3. KONSTANTA & PENGATURAN UTAMA
 -- ============================================================
-local VERSI              = "1.1.0"
+local VERSI              = "1.2.0"
 local NAMA_FOLDER        = "KurooEmote"
 local FILE_FAVORIT       = NAMA_FOLDER .. "/favorites.json"
 local FILE_CACHE         = NAMA_FOLDER .. "/emotes_catalog_v2.json"
@@ -832,8 +832,8 @@ LabelSenyum.Parent = TombolIkonEmote
 local WadahWheel = Instance.new("Frame")
 WadahWheel.Name = "WadahWheel"
 WadahWheel.AnchorPoint = Vector2.new(0.5, 0.5)
-WadahWheel.Position = UDim2.new(0.5, 0, 0.5, 8)
-WadahWheel.Size = UDim2.new(0, 560, 0, 502)
+WadahWheel.Position = UDim2.new(0.5, 0, 0.5, 4)
+WadahWheel.Size = UDim2.new(0, 560, 0, 598)
 WadahWheel.BackgroundTransparency = 1
 WadahWheel.Visible = false
 WadahWheel.ZIndex = 10
@@ -1341,7 +1341,7 @@ GarisBerikutnya.Parent = TombolBerikutnya
 local LabelStatus = Instance.new("TextLabel")
 LabelStatus.Name = "LabelStatus"
 LabelStatus.AnchorPoint = Vector2.new(0.5, 0)
-LabelStatus.Position = UDim2.new(0.5, 0, 0, 482)
+LabelStatus.Position = UDim2.new(0.5, 0, 0, 580)
 LabelStatus.Size = UDim2.new(0, 360, 0, 16)
 LabelStatus.BackgroundTransparency = 1
 LabelStatus.Font = Enum.Font.Gotham
@@ -1350,6 +1350,764 @@ LabelStatus.TextColor3 = WARNA.TeksRedup
 LabelStatus.Text = ""
 LabelStatus.ZIndex = 15
 LabelStatus.Parent = WadahWheel
+
+-- ============================================================
+-- 10J. SISTEM ANIMATION MODE & CUSTOM ANIMATION PACKS (v1.2.0)
+-- ============================================================
+local AnimSys = (function()
+    local ContentProvider = game:GetService("ContentProvider")
+    local ANIM_DB_URL     = "https://raw.githubusercontent.com/KurooNeko874/Universal-Script/main/data/animations.lua"
+    local FILE_CUSTOM     = NAMA_FOLDER .. "/custom_animations.json"
+    local FILE_AUTO_ANIM  = NAMA_FOLDER .. "/active_animations.json"
+
+    local S = {
+        SubMode      = "All Anim", -- All Anim | Idle | Walk | Run | Jump | Fall | Climb | Swim | Custom
+        AnimDB       = { Full = {}, Idle = {}, Walk = {}, Run = {}, Jump = {}, Fall = {}, Climb = {}, Swim = {}, SwimIdle = {} },
+        CustomPacks  = {},         -- Array of { name = string, data = { Idle=..., Walk=..., Run=..., Jump=..., Fall=..., Climb=..., Swim=... } }
+        ActiveState  = {},         -- [animType] = id (or {id1, id2} for Idle)
+        AutoApply    = true,
+        DbLoaded     = false,
+        OnRefreshUI  = nil,
+    }
+
+    local function saveCustomPacks()
+        simpanFileJson(FILE_CUSTOM, S.CustomPacks)
+    end
+
+    local function loadCustomPacks()
+        local raw = bacaFileJson(FILE_CUSTOM)
+        if type(raw) == "table" then
+            S.CustomPacks = {}
+            for _, p in ipairs(raw) do
+                if type(p) == "table" and type(p.name) == "string" and type(p.data) == "table" then
+                    table.insert(S.CustomPacks, p)
+                end
+            end
+        end
+    end
+
+    local function saveActiveState()
+        simpanFileJson(FILE_AUTO_ANIM, { auto = S.AutoApply, state = S.ActiveState })
+    end
+
+    local function loadActiveState()
+        local raw = bacaFileJson(FILE_AUTO_ANIM)
+        if type(raw) == "table" then
+            if type(raw.auto) == "boolean" then S.AutoApply = raw.auto end
+            if type(raw.state) == "table" then S.ActiveState = raw.state end
+        end
+    end
+
+    local function preloadAnim(animId)
+        if not animId then return end
+        local ids = (type(animId) == "table") and animId or { animId }
+        local list = {}
+        for _, id in ipairs(ids) do
+            local clean = tostring(id or ""):gsub("%D", "")
+            if clean ~= "" then
+                local a = Instance.new("Animation")
+                a.AnimationId = "rbxassetid://" .. clean
+                table.insert(list, a)
+            end
+        end
+        if #list > 0 then
+            pcall(function() ContentProvider:PreloadAsync(list) end)
+        end
+    end
+
+    local function getAnimObj(folder, names)
+        for _, n in ipairs(names) do
+            local obj = folder:FindFirstChild(n)
+            if obj and obj:IsA("Animation") then return obj end
+        end
+        return folder:FindFirstChildOfClass("Animation")
+    end
+
+    local function reloadHumanoidAnim(hum)
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, tr in pairs(animator:GetPlayingAnimationTracks()) do
+                pcall(function() if tr.IsPlaying then tr:Stop(0.12) end end)
+            end
+        end
+        task.wait(0.05)
+        pcall(function()
+            hum:ChangeState(Enum.HumanoidStateType.Running)
+            hum:Move(Vector3.new(0.1, 0, 0), true)
+            task.wait(0.05)
+            hum:Move(Vector3.new(), true)
+        end)
+    end
+
+    local function setAnimOnAnimate(animate, animType, animId)
+        local function fmtId(v)
+            local clean = tostring(v or ""):gsub("%D", "")
+            if clean == "" then return nil end
+            return "rbxassetid://" .. clean
+        end
+        if animType == "Idle" then
+            local folder = animate:FindFirstChild("idle")
+            if folder then
+                local a1 = getAnimObj(folder, { "Animation1", "IdleAnim" })
+                local a2 = getAnimObj(folder, { "Animation2" })
+                if type(animId) == "table" then
+                    local f1 = fmtId(animId[1])
+                    local f2 = fmtId(animId[2] or animId[1])
+                    if a1 and f1 then a1.AnimationId = f1 end
+                    if a2 and f2 then a2.AnimationId = f2 end
+                else
+                    local f1 = fmtId(animId)
+                    if a1 and f1 then a1.AnimationId = f1 end
+                    if a2 and f1 then a2.AnimationId = f1 end
+                end
+            end
+        elseif animType == "Walk" then
+            local folder = animate:FindFirstChild("walk")
+            local f = fmtId(animId)
+            if folder and f then local a = getAnimObj(folder, { "WalkAnim", "Animation" }); if a then a.AnimationId = f end end
+        elseif animType == "Run" then
+            local folder = animate:FindFirstChild("run")
+            local f = fmtId(animId)
+            if folder and f then local a = getAnimObj(folder, { "RunAnim", "Animation" }); if a then a.AnimationId = f end end
+        elseif animType == "Jump" then
+            local folder = animate:FindFirstChild("jump")
+            local f = fmtId(animId)
+            if folder and f then local a = getAnimObj(folder, { "JumpAnim", "Animation" }); if a then a.AnimationId = f end end
+        elseif animType == "Fall" then
+            local folder = animate:FindFirstChild("fall")
+            local f = fmtId(animId)
+            if folder and f then local a = getAnimObj(folder, { "FallAnim", "Animation" }); if a then a.AnimationId = f end end
+        elseif animType == "Climb" then
+            local folder = animate:FindFirstChild("climb")
+            local f = fmtId(animId)
+            if folder and f then local a = getAnimObj(folder, { "ClimbAnim", "Animation" }); if a then a.AnimationId = f end end
+        elseif animType == "Swim" then
+            local folder = animate:FindFirstChild("swim")
+            local f = fmtId(animId)
+            if folder and f then local a = getAnimObj(folder, { "Swim", "SwimAnim", "Animation" }); if a then a.AnimationId = f end end
+        elseif animType == "SwimIdle" then
+            local folder = animate:FindFirstChild("swimidle")
+            local f = fmtId(animId)
+            if folder and f then local a = getAnimObj(folder, { "SwimIdle", "Animation" }); if a then a.AnimationId = f end end
+        end
+    end
+
+    local function applyTableToChar(char, animMap)
+        if not char or type(animMap) ~= "table" then return false end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local animate = char:FindFirstChild("Animate")
+        if not hum or not animate then return false end
+        for animType, animId in pairs(animMap) do
+            if animId then
+                preloadAnim(animId)
+                pcall(setAnimOnAnimate, animate, animType, animId)
+            end
+        end
+        pcall(function()
+            animate.Disabled = true
+            task.wait(0.08)
+            animate.Disabled = false
+        end)
+        reloadHumanoidAnim(hum)
+        return true
+    end
+
+    function S.ApplySingle(animType, animId, labelName)
+        local char = PemainLokal.Character
+        if not char then return end
+        S.ActiveState[animType] = animId
+        saveActiveState()
+        if applyTableToChar(char, { [animType] = animId }) then
+            tampilkanNotif(animType .. ": " .. tostring(labelName or animId) .. " diterapkan!", WARNA.Sukses)
+        end
+    end
+
+    function S.ApplyFullPack(packName)
+        local char = PemainLokal.Character
+        if not char then return end
+        local types = { "Idle", "Walk", "Run", "Jump", "Fall", "Climb", "Swim", "SwimIdle" }
+        local toApply = {}
+        for _, t in ipairs(types) do
+            local id = S.AnimDB[t] and S.AnimDB[t][packName]
+            if id then
+                toApply[t] = id
+                S.ActiveState[t] = id
+            end
+        end
+        saveActiveState()
+        if applyTableToChar(char, toApply) then
+            tampilkanNotif('Animasi "' .. packName .. '" diterapkan!', WARNA.Sukses)
+        end
+    end
+
+    function S.ApplyCustomPack(pack)
+        if type(pack) ~= "table" or type(pack.data) ~= "table" then return end
+        local char = PemainLokal.Character
+        if not char then return end
+        for k, v in pairs(pack.data) do
+            if v and tostring(v) ~= "" then
+                S.ActiveState[k] = v
+            end
+        end
+        saveActiveState()
+        if applyTableToChar(char, pack.data) then
+            tampilkanNotif('Custom "' .. pack.name .. '" diterapkan!', WARNA.Emas)
+        end
+    end
+
+    function S.DeleteCustomPack(idx)
+        local p = S.CustomPacks[idx]
+        if not p then return end
+        local nm = p.name
+        table.remove(S.CustomPacks, idx)
+        saveCustomPacks()
+        tampilkanNotif('Custom "' .. nm .. '" dihapus.', WARNA.Bahaya)
+        if S.OnRefreshUI then S.OnRefreshUI(false) end
+    end
+
+    function S.ResetAnimations()
+        S.ActiveState = {}
+        saveActiveState()
+        local char = PemainLokal.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local animate = char and char:FindFirstChild("Animate")
+        if animate then
+            pcall(function()
+                animate.Disabled = true
+                task.wait(0.08)
+                animate.Disabled = false
+            end)
+        end
+        if hum then reloadHumanoidAnim(hum) end
+        tampilkanNotif("Animasi di-reset (respawn untuk default penuh).", WARNA.Aksen)
+    end
+
+    -- Auto-Apply saat Respawn
+    catatKoneksi(PemainLokal.CharacterAdded:Connect(function(newChar)
+        if not S.AutoApply or next(S.ActiveState) == nil then return end
+        newChar:WaitForChild("Humanoid", 10)
+        newChar:WaitForChild("Animate", 10)
+        task.wait(0.3)
+        applyTableToChar(newChar, S.ActiveState)
+    end))
+
+    -- Muat AnimDB dari GitHub secara async
+    loadCustomPacks()
+    loadActiveState()
+    task.spawn(function()
+        local raw = ambilTeksHttp(ANIM_DB_URL)
+        if type(raw) == "string" and #raw > 100 then
+            local fn = loadstring(raw)
+            if type(fn) == "function" then
+                local ok, tbl = pcall(fn)
+                if ok and type(tbl) == "table" then
+                    S.AnimDB = tbl
+                    S.DbLoaded = true
+                    if Status.ModeTampilan == "Animasi" and S.OnRefreshUI then
+                        S.OnRefreshUI(false)
+                    end
+                end
+            end
+        end
+    end)
+
+    -- 1) Tombol "Animation" tepat di bawah tombol Favorit
+    local TombolModeAnim = Instance.new("TextButton")
+    TombolModeAnim.Name = "TombolModeAnimasi"
+    TombolModeAnim.AnchorPoint = Vector2.new(0.5, 0)
+    TombolModeAnim.Position = UDim2.new(0.5, 0, 0, 484)
+    TombolModeAnim.Size = UDim2.new(0, 214, 0, 34)
+    TombolModeAnim.BackgroundColor3 = WARNA.LatarPanel
+    TombolModeAnim.BackgroundTransparency = 0.08
+    TombolModeAnim.AutoButtonColor = false
+    TombolModeAnim.Font = Enum.Font.GothamBold
+    TombolModeAnim.TextSize = 13
+    TombolModeAnim.TextColor3 = WARNA.Aksen
+    TombolModeAnim.Text = "Animation"
+    TombolModeAnim.ZIndex = 16
+    TombolModeAnim.Parent = WadahWheel
+
+    local scAnim = Instance.new("UICorner")
+    scAnim.CornerRadius = UDim.new(0, 17)
+    scAnim.Parent = TombolModeAnim
+
+    local stAnim = Instance.new("UIStroke")
+    stAnim.Color = WARNA.Aksen
+    stAnim.Thickness = 1.4
+    stAnim.Transparency = 0.3
+    stAnim.Parent = TombolModeAnim
+
+    -- 2) Bar Kategori Animasi (tampil hanya saat Mode Animasi aktif)
+    local BarKat = Instance.new("Frame")
+    BarKat.Name = "BarKategoriAnim"
+    BarKat.AnchorPoint = Vector2.new(0.5, 0)
+    BarKat.Position = UDim2.new(0.5, 0, 0, 524)
+    BarKat.Size = UDim2.new(0, 540, 0, 52)
+    BarKat.BackgroundTransparency = 1
+    BarKat.Visible = false
+    BarKat.ZIndex = 16
+    BarKat.Parent = WadahWheel
+
+    local Row1 = Instance.new("Frame")
+    Row1.Size = UDim2.new(1, 0, 0, 24)
+    Row1.Position = UDim2.new(0, 0, 0, 0)
+    Row1.BackgroundTransparency = 1
+    Row1.ZIndex = 16
+    Row1.Parent = BarKat
+    local lay1 = Instance.new("UIListLayout")
+    lay1.FillDirection = Enum.FillDirection.Horizontal
+    lay1.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    lay1.VerticalAlignment = Enum.VerticalAlignment.Center
+    lay1.Padding = UDim.new(0, 4)
+    lay1.Parent = Row1
+
+    local Row2 = Instance.new("Frame")
+    Row2.Size = UDim2.new(1, 0, 0, 24)
+    Row2.Position = UDim2.new(0, 0, 0, 28)
+    Row2.BackgroundTransparency = 1
+    Row2.ZIndex = 16
+    Row2.Parent = BarKat
+    local lay2 = Instance.new("UIListLayout")
+    lay2.FillDirection = Enum.FillDirection.Horizontal
+    lay2.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    lay2.VerticalAlignment = Enum.VerticalAlignment.Center
+    lay2.Padding = UDim.new(0, 6)
+    lay2.Parent = Row2
+
+    local catButtons = {}
+    local CATS = { "All Anim", "Idle", "Walk", "Run", "Jump", "Fall", "Climb", "Swim", "Custom" }
+
+    local function refreshCatHighlight()
+        for catName, info in pairs(catButtons) do
+            local isSel = (S.SubMode == catName)
+            info.btn.BackgroundColor3 = isSel and (catName == "Custom" and WARNA.Emas or WARNA.Aksen) or WARNA.LatarPanel
+            info.btn.TextColor3 = isSel and Color3.fromRGB(16, 17, 21) or WARNA.TeksUtama
+            info.stroke.Color = isSel and (catName == "Custom" and WARNA.Emas or WARNA.Aksen) or WARNA.GarisPanel
+        end
+    end
+
+    for _, catName in ipairs(CATS) do
+        local b = Instance.new("TextButton")
+        b.Name = "Cat_" .. catName
+        b.AutomaticSize = Enum.AutomaticSize.X
+        b.Size = UDim2.new(0, 0, 0, 22)
+        b.BackgroundColor3 = WARNA.LatarPanel
+        b.BackgroundTransparency = 0.08
+        b.AutoButtonColor = false
+        b.Font = Enum.Font.GothamBold
+        b.TextSize = 10
+        b.TextColor3 = WARNA.TeksUtama
+        b.Text = catName
+        b.ZIndex = 17
+        b.Parent = Row1
+
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 8)
+        pad.PaddingRight = UDim.new(0, 8)
+        pad.Parent = b
+
+        local cr = Instance.new("UICorner")
+        cr.CornerRadius = UDim.new(1, 0)
+        cr.Parent = b
+
+        local st = Instance.new("UIStroke")
+        st.Color = WARNA.GarisPanel
+        st.Thickness = 1.1
+        st.Parent = b
+
+        catButtons[catName] = { btn = b, stroke = st }
+        catatKoneksi(b.MouseButton1Click:Connect(function()
+            Status.ModeBintang = false
+            S.SubMode = catName
+            refreshCatHighlight()
+            if S.OnRefreshUI then S.OnRefreshUI(true) end
+        end))
+    end
+
+    -- Tombol Baris 2: [+ Buat Custom]  [Auto Apply: ON]  [Reset Anim]
+    local function makeActionBtn(text, color, parent)
+        local b = Instance.new("TextButton")
+        b.AutomaticSize = Enum.AutomaticSize.X
+        b.Size = UDim2.new(0, 0, 0, 22)
+        b.BackgroundColor3 = WARNA.LatarPanel
+        b.BackgroundTransparency = 0.06
+        b.AutoButtonColor = false
+        b.Font = Enum.Font.GothamBold
+        b.TextSize = 10
+        b.TextColor3 = color
+        b.Text = text
+        b.ZIndex = 17
+        b.Parent = parent
+        local pad = Instance.new("UIPadding")
+        pad.PaddingLeft = UDim.new(0, 10)
+        pad.PaddingRight = UDim.new(0, 10)
+        pad.Parent = b
+        local cr = Instance.new("UICorner")
+        cr.CornerRadius = UDim.new(1, 0)
+        cr.Parent = b
+        local st = Instance.new("UIStroke")
+        st.Color = color
+        st.Thickness = 1.1
+        st.Transparency = 0.35
+        st.Parent = b
+        return b, st
+    end
+
+    local btnBuatCustom = makeActionBtn("+ Buat Custom Anim", WARNA.Emas, Row2)
+    local btnAutoApply, stAutoApply = makeActionBtn("Auto Apply: " .. (S.AutoApply and "ON" or "OFF"), S.AutoApply and WARNA.Sukses or WARNA.TeksSekunder, Row2)
+    local btnResetAnim = makeActionBtn("Reset Anim", WARNA.Bahaya, Row2)
+
+    catatKoneksi(btnAutoApply.MouseButton1Click:Connect(function()
+        S.AutoApply = not S.AutoApply
+        saveActiveState()
+        btnAutoApply.Text = "Auto Apply: " .. (S.AutoApply and "ON" or "OFF")
+        btnAutoApply.TextColor3 = S.AutoApply and WARNA.Sukses or WARNA.TeksSekunder
+        stAutoApply.Color = S.AutoApply and WARNA.Sukses or WARNA.TeksSekunder
+        tampilkanNotif("Auto Apply Animasi: " .. (S.AutoApply and "ON" or "OFF"), S.AutoApply and WARNA.Sukses or WARNA.TeksSekunder)
+    end))
+
+    catatKoneksi(btnResetAnim.MouseButton1Click:Connect(function()
+        S.ResetAnimations()
+    end))
+
+    -- 3) Modal Pembuat Custom Animation Pack (bebas nama & bebas ID / ambil dari aktif)
+    local ModalCustom = Instance.new("Frame")
+    ModalCustom.Name = "ModalCustomAnim"
+    ModalCustom.AnchorPoint = Vector2.new(0.5, 0.5)
+    ModalCustom.Position = UDim2.new(0.5, 0, 0.5, 0)
+    ModalCustom.Size = UDim2.new(0, 340, 0, 376)
+    ModalCustom.BackgroundColor3 = Color3.fromRGB(16, 17, 22)
+    ModalCustom.BackgroundTransparency = 0.03
+    ModalCustom.BorderSizePixel = 0
+    ModalCustom.Visible = false
+    ModalCustom.ZIndex = 60
+    ModalCustom.Parent = LayarGui
+
+    local mcCorner = Instance.new("UICorner")
+    mcCorner.CornerRadius = UDim.new(0, 14)
+    mcCorner.Parent = ModalCustom
+
+    local mcStroke = Instance.new("UIStroke")
+    mcStroke.Color = WARNA.Emas
+    mcStroke.Thickness = 1.6
+    mcStroke.Parent = ModalCustom
+
+    local mcTitle = Instance.new("TextLabel")
+    mcTitle.Size = UDim2.new(1, -24, 0, 28)
+    mcTitle.Position = UDim2.new(0, 12, 0, 8)
+    mcTitle.BackgroundTransparency = 1
+    mcTitle.Font = Enum.Font.GothamBold
+    mcTitle.TextSize = 14
+    mcTitle.TextColor3 = WARNA.Emas
+    mcTitle.Text = "Buat Custom Animasi"
+    mcTitle.TextXAlignment = Enum.TextXAlignment.Left
+    mcTitle.ZIndex = 61
+    mcTitle.Parent = ModalCustom
+
+    local mcSub = Instance.new("TextLabel")
+    mcSub.Size = UDim2.new(1, -24, 0, 16)
+    mcSub.Position = UDim2.new(0, 12, 0, 32)
+    mcSub.BackgroundTransparency = 1
+    mcSub.Font = Enum.Font.Gotham
+    mcSub.TextSize = 10
+    mcSub.TextColor3 = WARNA.TeksSekunder
+    mcSub.Text = "Otomatis terisi dari animasi aktif, atau isi ID bebas:"
+    mcSub.TextXAlignment = Enum.TextXAlignment.Left
+    mcSub.ZIndex = 61
+    mcSub.Parent = ModalCustom
+
+    local mcInputs = {}
+    local FIELDS = {
+        { key = "Name",  label = "Nama Preset", ph = "contoh: Custom 1 / Anime Mix" },
+        { key = "Idle",  label = "Idle ID",     ph = "id1 atau id1,id2 (opsional)" },
+        { key = "Walk",  label = "Walk ID",     ph = "Animation ID (opsional)" },
+        { key = "Run",   label = "Run ID",      ph = "Animation ID (opsional)" },
+        { key = "Jump",  label = "Jump ID",     ph = "Animation ID (opsional)" },
+        { key = "Fall",  label = "Fall ID",     ph = "Animation ID (opsional)" },
+        { key = "Climb", label = "Climb ID",    ph = "Animation ID (opsional)" },
+        { key = "Swim",  label = "Swim ID",     ph = "Animation ID (opsional)" },
+    }
+
+    for idx, f in ipairs(FIELDS) do
+        local yPos = 54 + (idx - 1) * 34
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(0, 86, 0, 26)
+        lbl.Position = UDim2.new(0, 12, 0, yPos)
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 11
+        lbl.TextColor3 = (f.key == "Name") and WARNA.Emas or WARNA.TeksUtama
+        lbl.Text = f.label
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.ZIndex = 61
+        lbl.Parent = ModalCustom
+
+        local tb = Instance.new("TextBox")
+        tb.Size = UDim2.new(1, -112, 0, 26)
+        tb.Position = UDim2.new(0, 100, 0, yPos)
+        tb.BackgroundColor3 = Color3.fromRGB(28, 30, 38)
+        tb.BorderSizePixel = 0
+        tb.Font = Enum.Font.GothamMedium
+        tb.TextSize = 11
+        tb.TextColor3 = WARNA.TeksUtama
+        tb.PlaceholderColor3 = WARNA.TeksRedup
+        tb.PlaceholderText = f.ph
+        tb.Text = ""
+        tb.ClearTextOnFocus = false
+        tb.ZIndex = 61
+        tb.Parent = ModalCustom
+
+        local tbc = Instance.new("UICorner")
+        tbc.CornerRadius = UDim.new(0, 7)
+        tbc.Parent = tb
+
+        local tbp = Instance.new("UIPadding")
+        tbp.PaddingLeft = UDim.new(0, 8)
+        tbp.PaddingRight = UDim.new(0, 8)
+        tbp.Parent = tb
+
+        mcInputs[f.key] = tb
+    end
+
+    local function prefillFromActive()
+        mcInputs.Name.Text = "Custom " .. tostring(#S.CustomPacks + 1)
+        for _, key in ipairs({ "Idle", "Walk", "Run", "Jump", "Fall", "Climb", "Swim" }) do
+            local v = S.ActiveState[key]
+            if type(v) == "table" then
+                mcInputs[key].Text = tostring(v[1] or "") .. (v[2] and ("," .. tostring(v[2])) or "")
+            elseif v then
+                mcInputs[key].Text = tostring(v)
+            else
+                mcInputs[key].Text = ""
+            end
+        end
+    end
+
+    local btnSaveCustom = Instance.new("TextButton")
+    btnSaveCustom.Size = UDim2.new(0, 150, 0, 32)
+    btnSaveCustom.Position = UDim2.new(0, 12, 1, -42)
+    btnSaveCustom.BackgroundColor3 = WARNA.Sukses
+    btnSaveCustom.AutoButtonColor = false
+    btnSaveCustom.Font = Enum.Font.GothamBold
+    btnSaveCustom.TextSize = 12
+    btnSaveCustom.TextColor3 = Color3.fromRGB(14, 18, 16)
+    btnSaveCustom.Text = "Simpan & Pakai"
+    btnSaveCustom.ZIndex = 61
+    btnSaveCustom.Parent = ModalCustom
+    local csc = Instance.new("UICorner"); csc.CornerRadius = UDim.new(0, 8); csc.Parent = btnSaveCustom
+
+    local btnCancelCustom = Instance.new("TextButton")
+    btnCancelCustom.Size = UDim2.new(0, 150, 0, 32)
+    btnCancelCustom.Position = UDim2.new(1, -162, 1, -42)
+    btnCancelCustom.BackgroundColor3 = Color3.fromRGB(48, 50, 60)
+    btnCancelCustom.AutoButtonColor = false
+    btnCancelCustom.Font = Enum.Font.GothamBold
+    btnCancelCustom.TextSize = 12
+    btnCancelCustom.TextColor3 = WARNA.TeksUtama
+    btnCancelCustom.Text = "Batal"
+    btnCancelCustom.ZIndex = 61
+    btnCancelCustom.Parent = ModalCustom
+    local ccc = Instance.new("UICorner"); ccc.CornerRadius = UDim.new(0, 8); ccc.Parent = btnCancelCustom
+
+    catatKoneksi(btnBuatCustom.MouseButton1Click:Connect(function()
+        prefillFromActive()
+        ModalCustom.Visible = true
+    end))
+
+    catatKoneksi(btnCancelCustom.MouseButton1Click:Connect(function()
+        ModalCustom.Visible = false
+    end))
+
+    catatKoneksi(btnSaveCustom.MouseButton1Click:Connect(function()
+        local nm = string.gsub(mcInputs.Name.Text or "", "^%s*(.-)%s*$", "%1")
+        if nm == "" then nm = "Custom " .. tostring(#S.CustomPacks + 1) end
+
+        local data = {}
+        local hasAny = false
+        for _, key in ipairs({ "Idle", "Walk", "Run", "Jump", "Fall", "Climb", "Swim" }) do
+            local raw = string.gsub(mcInputs[key].Text or "", "^%s*(.-)%s*$", "%1")
+            if raw ~= "" then
+                if key == "Idle" and string.find(raw, ",", 1, true) then
+                    local parts = {}
+                    for seg in string.gmatch(raw, "[^,]+") do
+                        local clean = seg:gsub("%D", "")
+                        if clean ~= "" then table.insert(parts, clean) end
+                    end
+                    if #parts > 0 then
+                        data.Idle = { parts[1], parts[2] or parts[1] }
+                        hasAny = true
+                    end
+                else
+                    local clean = raw:gsub("%D", "")
+                    if clean ~= "" then
+                        data[key] = (key == "Idle") and { clean, clean } or clean
+                        hasAny = true
+                    end
+                end
+            end
+        end
+
+        if not hasAny then
+            tampilkanNotif("Isi minimal 1 Animation ID atau pilih animasi dulu!", WARNA.Bahaya)
+            return
+        end
+
+        local newPack = { name = nm, data = data }
+        -- Timpa jika nama sama, atau tambah baru
+        local replaced = false
+        for idx, p in ipairs(S.CustomPacks) do
+            if string.lower(p.name) == string.lower(nm) then
+                S.CustomPacks[idx] = newPack
+                replaced = true
+                break
+            end
+        end
+        if not replaced then
+            table.insert(S.CustomPacks, newPack)
+        end
+        saveCustomPacks()
+        ModalCustom.Visible = false
+        S.SubMode = "Custom"
+        refreshCatHighlight()
+        S.ApplyCustomPack(newPack)
+        if S.OnRefreshUI then S.OnRefreshUI(true) end
+    end))
+
+    function S.CloseModal()
+        ModalCustom.Visible = false
+    end
+
+    function S.UpdateVisibility()
+        local inAnim = (Status.ModeTampilan == "Animasi")
+        BarKat.Visible = inAnim
+        if inAnim then
+            TombolModeAnim.Text = "←  Kembali ke Emote"
+            TombolModeAnim.TextColor3 = WARNA.TeksUtama
+            stAnim.Color = WARNA.GarisPanel
+            refreshCatHighlight()
+        else
+            TombolModeAnim.Text = "Animation"
+            TombolModeAnim.TextColor3 = WARNA.Aksen
+            stAnim.Color = WARNA.Aksen
+            ModalCustom.Visible = false
+        end
+    end
+
+    function S.BuildList(kataKunci)
+        local out = {}
+        local q = string.lower(string.gsub(kataKunci or "", "^%s*(.-)%s*$", "%1"))
+
+        if S.SubMode == "Custom" then
+            for idx, p in ipairs(S.CustomPacks) do
+                if q == "" or string.find(string.lower(p.name), q, 1, true) then
+                    table.insert(out, {
+                        id        = 0,
+                        name      = p.name,
+                        l         = string.lower(p.name),
+                        isAnim    = true,
+                        isCustom  = true,
+                        customIdx = idx,
+                        pack      = p,
+                        subMode   = "Custom",
+                    })
+                end
+            end
+            return out
+        end
+
+        -- Jika mengetik langsung angka Animation ID di sub-mode tunggal (Idle/Walk/Run/dll), tampilkan langsung di Slot 1!
+        local idAngka = tonumber(q)
+        if idAngka and math.floor(idAngka) == idAngka and idAngka > 0 and S.SubMode ~= "All Anim" then
+            table.insert(out, {
+                id       = idAngka,
+                name     = S.SubMode .. " #" .. tostring(idAngka),
+                l        = q,
+                isAnim   = true,
+                animType = S.SubMode,
+                animId   = (S.SubMode == "Idle") and { tostring(idAngka), tostring(idAngka) } or tostring(idAngka),
+                subMode  = S.SubMode,
+            })
+        end
+
+        if S.SubMode == "All Anim" then
+            local names = {}
+            if type(S.AnimDB.Full) == "table" and #S.AnimDB.Full > 0 then
+                names = S.AnimDB.Full
+            elseif type(S.AnimDB.Idle) == "table" then
+                for k in pairs(S.AnimDB.Idle) do table.insert(names, k) end
+                table.sort(names)
+            end
+            for _, nm in ipairs(names) do
+                if q == "" or string.find(string.lower(nm), q, 1, true) then
+                    local thumbId = (S.AnimDB.Walk and S.AnimDB.Walk[nm]) or (S.AnimDB.Run and S.AnimDB.Run[nm]) or 0
+                    table.insert(out, {
+                        id      = tonumber(thumbId) or 0,
+                        name    = nm,
+                        l       = string.lower(nm),
+                        isAnim  = true,
+                        isFull  = true,
+                        subMode = "All Anim",
+                    })
+                end
+            end
+        else
+            local tbl = S.AnimDB[S.SubMode]
+            if type(tbl) == "table" then
+                local keys = {}
+                for k in pairs(tbl) do table.insert(keys, k) end
+                table.sort(keys)
+                for _, nm in ipairs(keys) do
+                    if q == "" or string.find(string.lower(nm), q, 1, true) then
+                        local rawId = tbl[nm]
+                        local numId = tonumber(type(rawId) == "table" and rawId[1] or rawId) or 0
+                        table.insert(out, {
+                            id       = numId,
+                            name     = nm,
+                            l        = string.lower(nm),
+                            isAnim   = true,
+                            animType = S.SubMode,
+                            animId   = rawId,
+                            subMode  = S.SubMode,
+                        })
+                    end
+                end
+            end
+        end
+        return out
+    end
+
+    function S.HandleSlotClick(item)
+        if not item or not item.isAnim then return false end
+        if item.isCustom then
+            if Status.ModeBintang then
+                S.DeleteCustomPack(item.customIdx)
+                return false
+            else
+                S.ApplyCustomPack(item.pack)
+                return true
+            end
+        elseif item.isFull then
+            S.ApplyFullPack(item.name)
+            return true
+        else
+            S.ApplySingle(item.animType, item.animId, item.name)
+            return true
+        end
+    end
+
+    catatKoneksi(TombolModeAnim.MouseButton1Click:Connect(function()
+        Status.ModeBintang = false
+        if Status.ModeTampilan == "Animasi" then
+            Status.ModeTampilan = "Semua"
+        else
+            Status.ModeTampilan = "Animasi"
+        end
+        S.UpdateVisibility()
+        if S.OnRefreshUI then S.OnRefreshUI(true) end
+    end))
+
+    return S
+end)()
 
 -- ============================================================
 -- 11. PENYESUAIAN LAYAR OTOMATIS (RESPONSIF PC & MOBILE)
@@ -1372,8 +2130,8 @@ local function perbaruiTataLetakResponsif()
 
     -- Skala otomatis seluruh wadah wheel agar pas di layar HP maupun monitor PC
     local skalaX = (ukuranLayar.X * 0.94) / 560
-    local skalaY = (ukuranLayar.Y * 0.86) / 502
-    SkalaWheel.Scale = math.clamp(math.min(skalaX, skalaY), 0.48, 1.05)
+    local skalaY = (ukuranLayar.Y * 0.88) / 598
+    SkalaWheel.Scale = math.clamp(math.min(skalaX, skalaY), 0.44, 1.02)
 
     -- Ukuran tombol ikon senyum menyesuaikan perangkat
     if modeMobile then
@@ -1460,6 +2218,35 @@ end))
 -- 13. PEMBARUAN TAMPILAN WHEEL & FILTER PENCARIAN (RINGAN 60K+)
 -- ============================================================
 local function perbaruiTampilanBintang()
+    if Status.ModeTampilan == "Animasi" then
+        if AnimSys.SubMode == "Custom" then
+            LabelBintang.Text = "HAPUS"
+            if Status.ModeBintang then
+                TombolBintang.BackgroundColor3 = WARNA.Bahaya
+                TombolBintang.TextColor3 = WARNA.TeksUtama
+                GarisTombolBintang.Color = WARNA.Bahaya
+                GarisWheel.Color = WARNA.Bahaya
+                LabelModeTengah.Text = "KLIK UTK HAPUS"
+                LabelModeTengah.TextColor3 = WARNA.Bahaya
+            else
+                TombolBintang.BackgroundColor3 = WARNA.LatarPanel
+                TombolBintang.TextColor3 = WARNA.TeksSekunder
+                GarisTombolBintang.Color = WARNA.GarisPanel
+                GarisWheel.Color = WARNA.Emas
+                LabelModeTengah.Text = "CUSTOM ANIM"
+                LabelModeTengah.TextColor3 = WARNA.Emas
+            end
+        else
+            LabelBintang.Text = "ANIMASI"
+            TombolBintang.BackgroundColor3 = WARNA.LatarPanel
+            TombolBintang.TextColor3 = WARNA.TeksSekunder
+            GarisTombolBintang.Color = WARNA.GarisPanel
+            GarisWheel.Color = WARNA.Aksen
+            LabelModeTengah.Text = string.upper(AnimSys.SubMode)
+            LabelModeTengah.TextColor3 = WARNA.Aksen
+        end
+        return
+    end
     if Status.ModeTampilan == "Favorit" then
         LabelBintang.Text = "UNFAV"
         if Status.ModeBintang then
@@ -1514,7 +2301,18 @@ local function perbaruiTampilanTengah(itemEmote)
         LabelNamaTengah.Text = itemEmote.name
         LabelNamaTengah.TextColor3 = WARNA.TeksUtama
     else
-        if Status.ModeTampilan == "Favorit" and #Status.DaftarFavorit == 0 then
+        if Status.ModeTampilan == "Animasi" then
+            if AnimSys.SubMode == "Custom" and #AnimSys.CustomPacks == 0 then
+                LabelNamaTengah.Text = "Belum ada Custom\n(+ Buat Custom)"
+                LabelNamaTengah.TextColor3 = WARNA.TeksRedup
+            elseif #Status.DaftarTampil == 0 then
+                LabelNamaTengah.Text = "Animasi kosong"
+                LabelNamaTengah.TextColor3 = WARNA.TeksRedup
+            else
+                LabelNamaTengah.Text = "Pilih " .. AnimSys.SubMode
+                LabelNamaTengah.TextColor3 = WARNA.TeksSekunder
+            end
+        elseif Status.ModeTampilan == "Favorit" and #Status.DaftarFavorit == 0 then
             LabelNamaTengah.Text = "Belum ada Favorit"
             LabelNamaTengah.TextColor3 = WARNA.TeksRedup
         elseif #Status.DaftarTampil == 0 then
@@ -1550,9 +2348,15 @@ local function gambarHalamanWheel()
 
         if item then
             slot.Tombol.Visible = true
-            slot.Thumbnail.Image = buatUrlThumbnail(item.id)
-            slot.LabelNama.Text = item.name
-            slot.LencanaFav.Visible = (Status.SetFavorit[item.id] == true)
+            if item.isAnim then
+                slot.Thumbnail.Image = (item.id and item.id > 0) and buatUrlThumbnail(item.id) or ""
+                slot.LabelNama.Text = item.name
+                slot.LencanaFav.Visible = (item.isCustom == true)
+            else
+                slot.Thumbnail.Image = buatUrlThumbnail(item.id)
+                slot.LabelNama.Text = item.name
+                slot.LencanaFav.Visible = (Status.SetFavorit[item.id] == true)
+            end
             slot.Tombol.BackgroundColor3 = WARNA.SlotNormal
             slot.Garis.Transparency = 1
         else
@@ -1571,6 +2375,16 @@ end
 
 -- Bangun ulang daftar emote sesuai kata kunci pencarian / mode tampilan
 local function bangunUlangDaftarTampil(resetHalaman)
+    if Status.ModeTampilan == "Animasi" then
+        Status.DaftarTampil = AnimSys.BuildList(Status.KataKunciCari)
+        if resetHalaman then
+            Status.HalamanSekarang = 1
+        end
+        AnimSys.UpdateVisibility()
+        gambarHalamanWheel()
+        return
+    end
+    AnimSys.UpdateVisibility()
     local sumber = (Status.ModeTampilan == "Favorit") and Status.DaftarFavorit or Status.SemuaEmote
     local kataKunci = string.lower(string.gsub(Status.KataKunciCari or "", "^%s*(.-)%s*$", "%1"))
 
@@ -1705,6 +2519,7 @@ local function aturBukaWheel(buka)
             Status.ModeBintang = false
             perbaruiTampilanBintang()
         end
+        AnimSys.CloseModal()
     end
 end
 
@@ -1798,6 +2613,18 @@ end))
 
 -- Tombol Bintang ★ (Mode Tambah Favorit di Semua Emote / Mode Unfav di Daftar Favorit)
 catatKoneksi(TombolBintang.MouseButton1Click:Connect(function()
+    if Status.ModeTampilan == "Animasi" then
+        if AnimSys.SubMode == "Custom" then
+            Status.ModeBintang = not Status.ModeBintang
+            perbaruiTampilanBintang()
+            if Status.ModeBintang then
+                tampilkanNotif("Mode Hapus aktif — klik Custom Animasi yang ingin dihapus.", WARNA.Bahaya)
+            end
+        else
+            tampilkanNotif("Buka kategori Custom untuk menghapus preset Custom.", WARNA.Aksen)
+        end
+        return
+    end
     Status.ModeBintang = not Status.ModeBintang
     perbaruiTampilanBintang()
     if Status.ModeBintang then
@@ -1970,6 +2797,13 @@ for i = 1, SLOT_PER_HALAMAN do
         if not item then return end
 
         perbaruiTampilanTengah(item)
+
+        if item.isAnim then
+            if AnimSys.HandleSlotClick(item) then
+                aturBukaWheel(false)
+            end
+            return
+        end
 
         if Status.ModeBintang then
             if Status.ModeTampilan == "Favorit" then
@@ -2187,6 +3021,7 @@ end
 -- 17. INISIALISASI AWAL & FUNGSI PEMBERSIHAN (CLEANUP)
 -- ============================================================
 muatFavorit()
+AnimSys.OnRefreshUI = bangunUlangDaftarTampil
 
 -- Isi emote cadangan sementara agar UI langsung bisa dibuka sambil katalog 62k dimuat
 for _, item in ipairs(EMOTE_CADANGAN) do
