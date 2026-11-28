@@ -1357,21 +1357,29 @@ LabelStatus.Parent = WadahWheel
 local AnimSys = (function()
     local ContentProvider = game:GetService("ContentProvider")
     local ANIM_DB_URL     = "https://raw.githubusercontent.com/KurooNeko874/Universal-Script/main/data/animations.lua"
+    local ANIM_JSON_URLS  = {
+        "https://raw.githubusercontent.com/7yd7/sniper-Emote/refs/heads/test/AnimationSniper.json",
+        "https://raw.githubusercontent.com/7yd7/sniper-Emote/test/AnimationSniper.json",
+    }
+    local FILE_ANIM_CACHE = NAMA_FOLDER .. "/animations_catalog_v1.json"
     local FILE_CUSTOM     = NAMA_FOLDER .. "/custom_animations.json"
     local FILE_AUTO_ANIM  = NAMA_FOLDER .. "/active_animations.json"
 
     local S = {
-        SubMode      = "All Anim", -- All Anim | Idle | Walk | Run | Jump | Fall | Climb | Swim | Custom
-        AnimDB       = { Full = {}, Idle = {}, Walk = {}, Run = {}, Jump = {}, Fall = {}, Climb = {}, Swim = {}, SwimIdle = {} },
-        CustomPacks  = {},         -- Array of { name = string, data = { Idle=..., Walk=..., Run=..., Jump=..., Fall=..., Climb=..., Swim=... } }
-        ActiveState  = {},         -- [animType] = id (or {id1, id2} for Idle)
-        AutoApply    = true,
-        DbLoaded     = false,
-        OnRefreshUI  = nil,
+        SubMode         = "All Anim", -- All Anim | Idle | Walk | Run | Jump | Fall | Climb | Swim | Custom
+        AnimDB          = { Full = {}, Idle = {}, Walk = {}, Run = {}, Jump = {}, Fall = {}, Climb = {}, Swim = {}, SwimIdle = {} },
+        MarketPacks     = {},         -- Array of { id = bundleId, name = string, l = lower, bundledItems = table }
+        BundleAnimCache = {},         -- [bundleId] = { Idle = {id1,id2}, Walk = id, Run = id, Jump = id, Fall = id, Climb = id, Swim = id, SwimIdle = id }
+        CustomPacks     = {},         -- Array of { name = string, data = { Idle=..., Walk=..., ... } }
+        ActiveState     = {},         -- [animType] = id (or {id1, id2} for Idle)
+        AutoApply       = true,
+        DbLoaded        = false,
+        MarketLoaded    = false,
+        OnRefreshUI     = nil,
     }
 
     local function saveCustomPacks()
-        simpanFileJson(FILE_CUSTOM, S.CustomPacks)
+        tulisFileJson(FILE_CUSTOM, S.CustomPacks)
     end
 
     local function loadCustomPacks()
@@ -1387,7 +1395,7 @@ local AnimSys = (function()
     end
 
     local function saveActiveState()
-        simpanFileJson(FILE_AUTO_ANIM, { auto = S.AutoApply, state = S.ActiveState })
+        tulisFileJson(FILE_AUTO_ANIM, { auto = S.AutoApply, state = S.ActiveState })
     end
 
     local function loadActiveState()
@@ -1512,14 +1520,133 @@ local AnimSys = (function()
         return true
     end
 
+    -- Ekstrak semua AnimationId (Idle/Walk/Run/Jump/Fall/Climb/Swim/SwimIdle) dari Bundle Marketplace via game:GetObjects
+    local FOLDER_TO_TYPE = {
+        idle     = "Idle",
+        walk     = "Walk",
+        run      = "Run",
+        jump     = "Jump",
+        fall     = "Fall",
+        climb    = "Climb",
+        swim     = "Swim",
+        swimidle = "SwimIdle",
+    }
+
+    local function resolveBundleAnimations(pack)
+        if not pack or not pack.id then return nil end
+        if S.BundleAnimCache[pack.id] then
+            return S.BundleAnimCache[pack.id]
+        end
+        if type(pack.bundledItems) ~= "table" then return nil end
+
+        local assetIds = {}
+        for _, arr in pairs(pack.bundledItems) do
+            if type(arr) == "table" then
+                for _, aid in ipairs(arr) do
+                    local n = tonumber(aid)
+                    if n and n > 0 then table.insert(assetIds, n) end
+                end
+            elseif tonumber(arr) then
+                table.insert(assetIds, tonumber(arr))
+            end
+        end
+        if #assetIds == 0 then return nil end
+
+        local result = {}
+        local done = 0
+        for _, aid in ipairs(assetIds) do
+            task.spawn(function()
+                local okObj, objs = pcall(function()
+                    return game:GetObjects("rbxassetid://" .. tostring(aid))
+                end)
+                if okObj and type(objs) == "table" then
+                    for _, root in ipairs(objs) do
+                        for _, desc in ipairs(root:GetDescendants()) do
+                            if desc:IsA("Animation") and desc.AnimationId ~= "" then
+                                local parentName = desc.Parent and string.lower(desc.Parent.Name) or ""
+                                local mappedType = FOLDER_TO_TYPE[parentName]
+                                local cleanId = tostring(desc.AnimationId):gsub("%D", "")
+                                if mappedType and cleanId ~= "" then
+                                    if mappedType == "Idle" then
+                                        if type(result.Idle) ~= "table" then
+                                            result.Idle = { cleanId, cleanId }
+                                        else
+                                            local lname = string.lower(desc.Name)
+                                            if lname:find("2") then
+                                                result.Idle[2] = cleanId
+                                            else
+                                                result.Idle[1] = cleanId
+                                            end
+                                        end
+                                    else
+                                        result[mappedType] = cleanId
+                                    end
+                                end
+                            end
+                        end
+                        pcall(function() root:Destroy() end)
+                    end
+                end
+                done = done + 1
+            end)
+        end
+
+        local tStart = os.clock()
+        while done < #assetIds and (os.clock() - tStart) < 5 do
+            task.wait(0.05)
+        end
+
+        if next(result) ~= nil then
+            S.BundleAnimCache[pack.id] = result
+            return result
+        end
+        return nil
+    end
+
+    function S.ApplyMarketPack(pack, onlyType)
+        if not pack then return end
+        local char = PemainLokal.Character
+        if not char then return end
+        tampilkanNotif('Memuat animasi "' .. pack.name .. '"...', WARNA.Aksen)
+        task.spawn(function()
+            local animMap = resolveBundleAnimations(pack)
+            if not animMap then
+                tampilkanNotif('Gagal memuat bundle "' .. pack.name .. '".', WARNA.Bahaya)
+                return
+            end
+            if onlyType and onlyType ~= "All Anim" then
+                local id = animMap[onlyType]
+                if not id then
+                    tampilkanNotif('Bundle "' .. pack.name .. '" tidak punya animasi ' .. onlyType .. '.', WARNA.Bahaya)
+                    return
+                end
+                S.ActiveState[onlyType] = id
+                saveActiveState()
+                if applyTableToChar(char, { [onlyType] = id }) then
+                    tampilkanNotif(onlyType .. ': "' .. pack.name .. '" diterapkan!', WARNA.Sukses)
+                end
+            else
+                for k, v in pairs(animMap) do
+                    S.ActiveState[k] = v
+                end
+                saveActiveState()
+                if applyTableToChar(char, animMap) then
+                    tampilkanNotif('Full Pack "' .. pack.name .. '" diterapkan!', WARNA.Sukses)
+                end
+            end
+        end)
+    end
+
     function S.ApplySingle(animType, animId, labelName)
         local char = PemainLokal.Character
         if not char then return end
         S.ActiveState[animType] = animId
         saveActiveState()
-        if applyTableToChar(char, { [animType] = animId }) then
-            tampilkanNotif(animType .. ": " .. tostring(labelName or animId) .. " diterapkan!", WARNA.Sukses)
-        end
+        task.spawn(function()
+            if applyTableToChar(char, { [animType] = animId }) then
+                tampilkanNotif(animType .. ": " .. tostring(labelName or animId) .. " diterapkan!", WARNA.Sukses)
+            end
+        end)
     end
 
     function S.ApplyFullPack(packName)
@@ -1535,9 +1662,11 @@ local AnimSys = (function()
             end
         end
         saveActiveState()
-        if applyTableToChar(char, toApply) then
-            tampilkanNotif('Animasi "' .. packName .. '" diterapkan!', WARNA.Sukses)
-        end
+        task.spawn(function()
+            if applyTableToChar(char, toApply) then
+                tampilkanNotif('Animasi "' .. packName .. '" diterapkan!', WARNA.Sukses)
+            end
+        end)
     end
 
     function S.ApplyCustomPack(pack)
@@ -1550,9 +1679,11 @@ local AnimSys = (function()
             end
         end
         saveActiveState()
-        if applyTableToChar(char, pack.data) then
-            tampilkanNotif('Custom "' .. pack.name .. '" diterapkan!', WARNA.Emas)
-        end
+        task.spawn(function()
+            if applyTableToChar(char, pack.data) then
+                tampilkanNotif('Custom "' .. pack.name .. '" diterapkan!', WARNA.Emas)
+            end
+        end)
     end
 
     function S.DeleteCustomPack(idx)
@@ -1591,25 +1722,106 @@ local AnimSys = (function()
         applyTableToChar(newChar, S.ActiveState)
     end))
 
-    -- Muat AnimDB dari GitHub secara async
-    loadCustomPacks()
-    loadActiveState()
-    task.spawn(function()
-        local raw = ambilTeksHttp(ANIM_DB_URL)
-        if type(raw) == "string" and #raw > 100 then
-            local fn = loadstring(raw)
-            if type(fn) == "function" then
-                local ok, tbl = pcall(fn)
-                if ok and type(tbl) == "table" then
-                    S.AnimDB = tbl
-                    S.DbLoaded = true
-                    if Status.ModeTampilan == "Animasi" and S.OnRefreshUI then
-                        S.OnRefreshUI(false)
-                    end
+    -- Parse JSON AnimationSniper (12.155+ Marketplace Animation Packs)
+    local function parseMarketAnimJson(raw)
+        if type(raw) ~= "string" or #raw < 100 then return false end
+        local okDec, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+        if not okDec or type(decoded) ~= "table" then return false end
+        local arr = type(decoded.data) == "table" and decoded.data or decoded
+        if type(arr) ~= "table" or #arr < 5 then return false end
+
+        local list = {}
+        local seen = {}
+        for i = 1, #arr do
+            local it = arr[i]
+            if type(it) == "table" then
+                local id = tonumber(it.id)
+                local nm = tostring(it.name or "")
+                if id and nm ~= "" and not seen[id] and type(it.bundledItems) == "table" then
+                    seen[id] = true
+                    list[#list + 1] = {
+                        id           = id,
+                        name         = nm,
+                        l            = string.lower(nm),
+                        bundledItems = it.bundledItems,
+                    }
                 end
             end
         end
-    end)
+        if #list > 0 then
+            S.MarketPacks = list
+            S.MarketLoaded = true
+            return true
+        end
+        return false
+    end
+
+    -- Muat AnimDB & 12.155+ Marketplace Animations (dengan cache lokal!)
+    local isLoadingDb = false
+    local function ensureAnimDbLoaded()
+        if isLoadingDb then return end
+        if S.DbLoaded and S.MarketLoaded then return end
+        isLoadingDb = true
+        task.spawn(function()
+            -- 1. Muat AnimDB bawaan cepat
+            if not S.DbLoaded then
+                local raw = ambilTeksHttp(ANIM_DB_URL)
+                if type(raw) == "string" and #raw > 100 then
+                    local fn = loadstring(raw)
+                    if type(fn) == "function" then
+                        local ok, tbl = pcall(fn)
+                        if ok and type(tbl) == "table" then
+                            S.AnimDB = tbl
+                            S.DbLoaded = true
+                            if Status.ModeTampilan == "Animasi" and S.OnRefreshUI then
+                                S.OnRefreshUI(false)
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- 2. Muat 12.155+ Marketplace Animations dari cache lokal atau GitHub AnimationSniper.json
+            if not S.MarketLoaded then
+                local loadedFromCache = false
+                if punyaAksesFile then
+                    local okEx, exists = pcall(isfile, FILE_ANIM_CACHE)
+                    if okEx and exists then
+                        local okR, cachedRaw = pcall(readfile, FILE_ANIM_CACHE)
+                        if okR and type(cachedRaw) == "string" and #cachedRaw > 1000 then
+                            loadedFromCache = parseMarketAnimJson(cachedRaw)
+                        end
+                    end
+                end
+
+                if not loadedFromCache then
+                    if Status.ModeTampilan == "Animasi" then
+                        LabelStatus.Text = "Mengunduh 12.000+ Animasi Marketplace..."
+                    end
+                    for _, url in ipairs(ANIM_JSON_URLS) do
+                        local raw = ambilTeksHttp(url)
+                        if raw and #raw > 1000 and parseMarketAnimJson(raw) then
+                            if punyaAksesFile then
+                                pastikanFolderAda()
+                                pcall(writefile, FILE_ANIM_CACHE, raw)
+                            end
+                            break
+                        end
+                    end
+                end
+
+                if S.MarketLoaded and Status.ModeTampilan == "Animasi" and S.OnRefreshUI then
+                    LabelStatus.Text = formatAngka(#S.MarketPacks) .. " Animasi Marketplace tersedia"
+                    S.OnRefreshUI(false)
+                end
+            end
+            isLoadingDb = false
+        end)
+    end
+
+    loadCustomPacks()
+    loadActiveState()
+    ensureAnimDbLoaded()
 
     -- 1) Tombol "Animation" tepat di bawah tombol Favorit
     local TombolModeAnim = Instance.new("TextButton")
@@ -2030,29 +2242,75 @@ local AnimSys = (function()
         end
 
         if S.SubMode == "All Anim" then
-            local names = {}
-            if type(S.AnimDB.Full) == "table" and #S.AnimDB.Full > 0 then
-                names = S.AnimDB.Full
-            elseif type(S.AnimDB.Idle) == "table" then
-                for k in pairs(S.AnimDB.Idle) do table.insert(names, k) end
-                table.sort(names)
+            -- Gabungkan 12.155+ Marketplace Animation Packs + Preset Klasik
+            if #S.MarketPacks > 0 then
+                local limit = (q == "") and #S.MarketPacks or 400
+                for i = 1, #S.MarketPacks do
+                    local mp = S.MarketPacks[i]
+                    if q == "" or string.find(mp.l, q, 1, true) or (idAngka and string.find(tostring(mp.id), q, 1, true)) then
+                        out[#out + 1] = {
+                            id         = mp.id,
+                            name       = mp.name,
+                            l          = mp.l,
+                            isAnim     = true,
+                            isMarket   = true,
+                            marketPack = mp,
+                            subMode    = "All Anim",
+                        }
+                        if q ~= "" and #out >= limit then break end
+                    end
+                end
             end
-            for _, nm in ipairs(names) do
-                if q == "" or string.find(string.lower(nm), q, 1, true) then
-                    local thumbId = (S.AnimDB.Walk and S.AnimDB.Walk[nm]) or (S.AnimDB.Run and S.AnimDB.Run[nm]) or 0
-                    table.insert(out, {
-                        id      = tonumber(thumbId) or 0,
-                        name    = nm,
-                        l       = string.lower(nm),
-                        isAnim  = true,
-                        isFull  = true,
-                        subMode = "All Anim",
-                    })
+
+            -- Fallback preset klasik jika Marketplace JSON masih loading
+            if #out == 0 then
+                local names = {}
+                if type(S.AnimDB.Full) == "table" and #S.AnimDB.Full > 0 then
+                    names = S.AnimDB.Full
+                elseif type(S.AnimDB.Idle) == "table" then
+                    for k in pairs(S.AnimDB.Idle) do table.insert(names, k) end
+                    table.sort(names)
+                end
+                for _, nm in ipairs(names) do
+                    if q == "" or string.find(string.lower(nm), q, 1, true) then
+                        local thumbId = (S.AnimDB.Walk and S.AnimDB.Walk[nm]) or (S.AnimDB.Run and S.AnimDB.Run[nm]) or 0
+                        out[#out + 1] = {
+                            id      = tonumber(thumbId) or 0,
+                            name    = nm,
+                            l       = string.lower(nm),
+                            isAnim  = true,
+                            isFull  = true,
+                            subMode = "All Anim",
+                        }
+                    end
                 end
             end
         else
+            -- Sub-mode tunggal (Idle / Walk / Run / Jump / Fall / Climb / Swim):
+            -- 1) Tampilkan 12.155+ Marketplace Packs (saat diklik otomatis ekstrak HANYA slot ini!)
+            if #S.MarketPacks > 0 then
+                local limit = (q == "") and #S.MarketPacks or 400
+                for i = 1, #S.MarketPacks do
+                    local mp = S.MarketPacks[i]
+                    if q == "" or string.find(mp.l, q, 1, true) or (idAngka and string.find(tostring(mp.id), q, 1, true)) then
+                        out[#out + 1] = {
+                            id         = mp.id,
+                            name       = mp.name,
+                            l          = mp.l,
+                            isAnim     = true,
+                            isMarket   = true,
+                            marketPack = mp,
+                            animType   = S.SubMode,
+                            subMode    = S.SubMode,
+                        }
+                        if q ~= "" and #out >= limit then break end
+                    end
+                end
+            end
+
+            -- 2) Tambahkan juga preset klasik AnimDB jika cocok / saat loading
             local tbl = S.AnimDB[S.SubMode]
-            if type(tbl) == "table" then
+            if type(tbl) == "table" and (#out == 0 or q ~= "") then
                 local keys = {}
                 for k in pairs(tbl) do table.insert(keys, k) end
                 table.sort(keys)
@@ -2060,7 +2318,7 @@ local AnimSys = (function()
                     if q == "" or string.find(string.lower(nm), q, 1, true) then
                         local rawId = tbl[nm]
                         local numId = tonumber(type(rawId) == "table" and rawId[1] or rawId) or 0
-                        table.insert(out, {
+                        out[#out + 1] = {
                             id       = numId,
                             name     = nm,
                             l        = string.lower(nm),
@@ -2068,7 +2326,7 @@ local AnimSys = (function()
                             animType = S.SubMode,
                             animId   = rawId,
                             subMode  = S.SubMode,
-                        })
+                        }
                     end
                 end
             end
@@ -2086,6 +2344,9 @@ local AnimSys = (function()
                 S.ApplyCustomPack(item.pack)
                 return true
             end
+        elseif item.isMarket then
+            S.ApplyMarketPack(item.marketPack, item.animType or "All Anim")
+            return true
         elseif item.isFull then
             S.ApplyFullPack(item.name)
             return true
@@ -2101,6 +2362,7 @@ local AnimSys = (function()
             Status.ModeTampilan = "Semua"
         else
             Status.ModeTampilan = "Animasi"
+            ensureAnimDbLoaded()
         end
         S.UpdateVisibility()
         if S.OnRefreshUI then S.OnRefreshUI(true) end
@@ -2349,7 +2611,13 @@ local function gambarHalamanWheel()
         if item then
             slot.Tombol.Visible = true
             if item.isAnim then
-                slot.Thumbnail.Image = (item.id and item.id > 0) and buatUrlThumbnail(item.id) or ""
+                if item.isMarket and item.id and item.id > 0 then
+                    slot.Thumbnail.Image = "rbxthumb://type=BundleThumbnail&id=" .. tostring(item.id) .. "&w=150&h=150"
+                elseif item.id and item.id > 0 then
+                    slot.Thumbnail.Image = buatUrlThumbnail(item.id)
+                else
+                    slot.Thumbnail.Image = ""
+                end
                 slot.LabelNama.Text = item.name
                 slot.LencanaFav.Visible = (item.isCustom == true)
             else
