@@ -200,10 +200,17 @@ local function applyKorbloxLegToChar(char, side, state)
     end
 end
 
+local function notifyKurooSync()
+    if ctx.KurooSync and typeof(ctx.KurooSync.PushNow) == "function" then
+        ctx.KurooSync.PushNow()
+    end
+end
+
 local function setHeadless(state)
     BodyPartState.HeadlessHorseman = state
     headlessEnabled = state
     applyHeadlessToChar(LocalPlayer.Character, state)
+    notifyKurooSync()
 end
 
 local function setKorbloxLeg(side, state)
@@ -213,6 +220,7 @@ local function setKorbloxLeg(side, state)
         BodyPartState.KorbloxLeft = state
     end
     applyKorbloxLegToChar(LocalPlayer.Character, side, state)
+    notifyKurooSync()
 end
 
 local function resetAllBodyParts()
@@ -224,6 +232,7 @@ local function resetAllBodyParts()
     applyHeadlessToChar(char, false)
     applyKorbloxLegToChar(char, "Right", false)
     applyKorbloxLegToChar(char, "Left", false)
+    notifyKurooSync()
 end
 
 LocalPlayer.CharacterAdded:Connect(function(newChar)
@@ -583,7 +592,9 @@ end
 
 local function AttachVisualItem(itemData)
     local cfg = EnsureItemConfig(itemData.Name)
-    return AttachVisualItemToCharacter(LocalPlayer.Character, itemData, cfg, ActiveItems)
+    local ok = AttachVisualItemToCharacter(LocalPlayer.Character, itemData, cfg, ActiveItems)
+    if ok then notifyKurooSync() end
+    return ok
 end
 
 local function RemoveVisualItem(itemName)
@@ -595,6 +606,7 @@ local function RemoveVisualItem(itemName)
             end)
         end
         ActiveItems[itemName] = nil
+        notifyKurooSync()
     end
 end
 
@@ -1008,5 +1020,146 @@ sectionLarpOther:AddButton({
         resetAllOtherPlayersLarping()
     end,
 })
+
+-- ========== KUROOHUB CROSS-PLAYER LARPING SYNC API ==========
+do
+    local syncedPeers = {} -- [Player] = { Hash = string, Entries = {}, State = table, CharConn = RBXScriptConnection }
+
+    local function findPresetByNameOrId(name, assetId)
+        if type(PresetItems) == "table" then
+            for _, p in ipairs(PresetItems) do
+                if (name and p.Name == name) or (assetId and p.AssetId == assetId) then
+                    return p
+                end
+            end
+        end
+        return nil
+    end
+
+    local function clearPeerVisuals(plr)
+        local rec = syncedPeers[plr]
+        if not rec then return end
+        for _, entry in pairs(rec.Entries) do
+            if entry and entry.Model then
+                pcall(function() entry.Model:Destroy() end)
+            end
+        end
+        table.clear(rec.Entries)
+        if plr.Character then
+            pcall(applyHeadlessToChar, plr.Character, false)
+            pcall(applyKorbloxLegToChar, plr.Character, "Right", false)
+            pcall(applyKorbloxLegToChar, plr.Character, "Left", false)
+        end
+    end
+
+    local function applyStateToPeerChar(plr, rec)
+        local char = plr and plr.Character
+        if not char then return end
+        local st = rec.State
+        if type(st) ~= "table" then return end
+
+        local bp = type(st.bp) == "table" and st.bp or {}
+        pcall(applyHeadlessToChar, char, bp.h == true)
+        pcall(applyKorbloxLegToChar, char, "Right", bp.kr == true)
+        pcall(applyKorbloxLegToChar, char, "Left", bp.kl == true)
+
+        if type(st.items) == "table" then
+            for _, it in ipairs(st.items) do
+                if type(it) == "table" and it.id then
+                    local preset = findPresetByNameOrId(it.name, tonumber(it.id))
+                    local itemData = preset or {
+                        Name       = tostring(it.name or ("Item_" .. tostring(it.id))),
+                        AssetId    = tonumber(it.id),
+                        IsGear     = it.gear == true,
+                        EffectType = tostring(it.eff or "Native"),
+                    }
+                    local cfg = {
+                        Scale       = tonumber(it.s) or 100,
+                        PosX        = tonumber(it.px) or 0,
+                        PosY        = tonumber(it.py) or 0,
+                        PosZ        = tonumber(it.pz) or 0,
+                        RotX        = tonumber(it.rx) or 0,
+                        RotY        = tonumber(it.ry) or 0,
+                        RotZ        = tonumber(it.rz) or 0,
+                        ShowEffects = (it.fx ~= false),
+                    }
+                    pcall(AttachVisualItemToCharacter, char, itemData, cfg, rec.Entries)
+                end
+            end
+        end
+    end
+
+    ctx.LarpingAPI = {
+        GetLocalState = function()
+            local itemsOut = {}
+            for itemName, entry in pairs(ActiveItems) do
+                if entry and entry.ItemData and entry.ItemData.AssetId then
+                    local cfg = entry.Config or EnsureItemConfig(itemName)
+                    table.insert(itemsOut, {
+                        name = entry.ItemData.Name,
+                        id   = entry.ItemData.AssetId,
+                        gear = entry.ItemData.IsGear == true,
+                        eff  = entry.ItemData.EffectType or "Native",
+                        s    = cfg.Scale or 100,
+                        px   = cfg.PosX or 0,
+                        py   = cfg.PosY or 0,
+                        pz   = cfg.PosZ or 0,
+                        rx   = cfg.RotX or 0,
+                        ry   = cfg.RotY or 0,
+                        rz   = cfg.RotZ or 0,
+                        fx   = cfg.ShowEffects ~= false,
+                    })
+                end
+            end
+            return {
+                bp = {
+                    h  = BodyPartState.HeadlessHorseman == true,
+                    kr = BodyPartState.KorbloxRight == true,
+                    kl = BodyPartState.KorbloxLeft == true,
+                },
+                items = itemsOut,
+            }
+        end,
+
+        ApplyRemoteState = function(plr, state)
+            if not plr or plr == LocalPlayer or not plr.Parent then return end
+            local okH, hash = pcall(function()
+                return HttpService:JSONEncode({ bp = state.bp, items = state.items })
+            end)
+            hash = okH and hash or tostring(os.clock())
+
+            local rec = syncedPeers[plr]
+            if rec and rec.Hash == hash then
+                return
+            end
+
+            if not rec then
+                rec = { Hash = "", Entries = {}, State = nil, CharConn = nil }
+                syncedPeers[plr] = rec
+                rec.CharConn = plr.CharacterAdded:Connect(function()
+                    task.wait(0.6)
+                    if syncedPeers[plr] then
+                        applyStateToPeerChar(plr, syncedPeers[plr])
+                    end
+                end)
+            else
+                clearPeerVisuals(plr)
+            end
+
+            rec.Hash = hash
+            rec.State = state
+            applyStateToPeerChar(plr, rec)
+        end,
+
+        ClearRemotePlayer = function(plr)
+            if not plr then return end
+            local rec = syncedPeers[plr]
+            if not rec then return end
+            clearPeerVisuals(plr)
+            if rec.CharConn then pcall(function() rec.CharConn:Disconnect() end) end
+            syncedPeers[plr] = nil
+        end,
+    }
+end
 
 end
