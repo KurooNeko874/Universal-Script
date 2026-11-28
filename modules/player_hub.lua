@@ -327,7 +327,16 @@ return function(ctx)
     local syncRunning = true
     local lastPushHash = ""
     local peerCount = 0
+    local lastSyncError = nil
     local statusParagraph = nil
+
+    local function getSyncTime()
+        local ok, st = pcall(function() return workspace:GetServerTimeNow() end)
+        if ok and type(st) == "number" and st > 1000000 then
+            return math.floor(st)
+        end
+        return os.time()
+    end
 
     local function safeRoomPath()
         local job = tostring(game.JobId or "")
@@ -344,6 +353,8 @@ return function(ctx)
             syncLine = "Menunggu URL Firebase (isi di data/sync_config.lua)"
         elseif not httpReq then
             syncLine = "Executor tidak mendukung HTTP Request"
+        elseif lastSyncError then
+            syncLine = "Error: " .. tostring(lastSyncError)
         else
             syncLine = string.format("Terhubung • %d Sesama User KurooHub di Server Ini", peerCount)
         end
@@ -374,7 +385,7 @@ return function(ctx)
             u = LocalPlayer.UserId,
             n = LocalPlayer.DisplayName,
             v = "1.2.2",
-            t = os.time(),
+            t = getSyncTime(),
             bp = larpState.bp,
             items = larpState.items,
         }
@@ -387,14 +398,24 @@ return function(ctx)
         if not okEnc or type(body) ~= "string" then return end
 
         local url = safeRoomPath() .. "/" .. tostring(LocalPlayer.UserId) .. ".json"
-        pcall(function()
-            httpReq({
+        local okReq, res = pcall(function()
+            return httpReq({
                 Url = url,
                 Method = "PUT",
                 Headers = { ["Content-Type"] = "application/json" },
                 Body = body,
             })
         end)
+        if okReq and type(res) == "table" and tonumber(res.StatusCode) and res.StatusCode >= 400 then
+            local errMsg = "HTTP " .. tostring(res.StatusCode) .. " (Cek Rules Firebase!)"
+            if lastSyncError ~= errMsg then
+                lastSyncError = errMsg
+                updateSyncStatusLabel()
+            end
+        elseif okReq and lastSyncError ~= nil then
+            lastSyncError = nil
+            updateSyncStatusLabel()
+        end
         lastPushHash = body
     end
 
@@ -415,13 +436,24 @@ return function(ctx)
         local okReq, res = pcall(function()
             return httpReq({ Url = url, Method = "GET" })
         end)
-        if not okReq or type(res) ~= "table" or type(res.Body) ~= "string" then return end
-        if res.Body == "null" or res.Body == "" then return end
+        if not okReq or type(res) ~= "table" then return end
+        if tonumber(res.StatusCode) and res.StatusCode >= 400 then
+            local errMsg = "HTTP " .. tostring(res.StatusCode) .. " (Cek Rules Firebase!)"
+            if lastSyncError ~= errMsg then
+                lastSyncError = errMsg
+                updateSyncStatusLabel()
+            end
+            return
+        elseif lastSyncError ~= nil then
+            lastSyncError = nil
+            updateSyncStatusLabel()
+        end
+        if type(res.Body) ~= "string" or res.Body == "null" or res.Body == "" then return end
 
         local okDec, roomData = pcall(function() return HttpService:JSONDecode(res.Body) end)
         if not okDec or type(roomData) ~= "table" then return end
 
-        local now = os.time()
+        local now = getSyncTime()
         local seenUids = {}
         local count = 0
 
@@ -429,7 +461,7 @@ return function(ctx)
             if type(entry) == "table" then
                 local uid = tonumber(entry.u) or tonumber(uidStr)
                 local ts = tonumber(entry.t) or 0
-                if uid and uid ~= LocalPlayer.UserId and (now - ts) <= 25 then
+                if uid and uid ~= LocalPlayer.UserId and math.abs(now - ts) <= 30 then
                     local plr = Players:GetPlayerByUserId(uid)
                     if plr and plr.Parent then
                         seenUids[uid] = true
