@@ -588,74 +588,6 @@ return function(ctx)
         end,
     })
 
-    -- ========== KUROOEMOTE & ANIMATION WHEEL (TERINTEGRASI) ==========
-    local KUROO_EMOTE_URL = "https://raw.githubusercontent.com/KurooNeko874/Universal-Script/refs/heads/main/KurooEmote.lua"
-    local EMOTE_CFG_FILE  = "KurooUniversal_AllEmote.json"
-    local emoteReqId      = 0
-
-    local function loadEmoteTogglePref()
-        if typeof(isfile) ~= "function" or typeof(readfile) ~= "function" then return true end
-        local val = true
-        pcall(function()
-            if not isfile(EMOTE_CFG_FILE) then return end
-            local dec = HttpService:JSONDecode(readfile(EMOTE_CFG_FILE))
-            if type(dec) == "table" and type(dec.enabled) == "boolean" then
-                val = dec.enabled
-            end
-        end)
-        return val
-    end
-
-    local function saveEmoteTogglePref(state)
-        if typeof(writefile) ~= "function" then return end
-        pcall(function()
-            writefile(EMOTE_CFG_FILE, HttpService:JSONEncode({ enabled = state == true }))
-        end)
-    end
-
-    local function stopKurooEmote()
-        emoteReqId = emoteReqId + 1
-        local env = (typeof(getgenv) == "function" and getgenv()) or _G
-        if type(env.KurooEmoteCleanup) == "function" then
-            pcall(env.KurooEmoteCleanup)
-        end
-    end
-
-    local function startKurooEmote()
-        emoteReqId = emoteReqId + 1
-        local myId = emoteReqId
-        task.spawn(function()
-            local ok, src = pcall(function() return game:HttpGet(KUROO_EMOTE_URL) end)
-            if not ok or type(src) ~= "string" or emoteReqId ~= myId then return end
-            local fn = loadstring(src)
-            if type(fn) == "function" and emoteReqId == myId then
-                pcall(fn)
-            end
-        end)
-    end
-
-    local initialEmoteOn = loadEmoteTogglePref()
-    local sectionEmote = tabPlayer:AddSection({ Name = "KurooEmote & Animation" })
-    sectionEmote:AddToggle({
-        Name = "KurooEmote + Animation Wheel",
-        Desc = "Roda 62.000+ Emote Marketplace + Full Animation Packs & Custom Animasi (tekan . atau klik ikon ☺)",
-        Default = initialEmoteOn,
-        Callback = function(state)
-            saveEmoteTogglePref(state)
-            if state then
-                startKurooEmote()
-                notify("KurooEmote", "Memuat KurooEmote & Animation Wheel...", 2)
-            else
-                stopKurooEmote()
-                notify("KurooEmote", "KurooEmote dimatikan.", 2)
-            end
-        end,
-    })
-
-    if initialEmoteOn then
-        task.delay(0.6, startKurooEmote)
-    end
-
     -- Inisialisasi awal
     updateSyncStatusLabel()
     task.defer(function()
@@ -688,7 +620,6 @@ return function(ctx)
         end
         table.clear(kurooPeers)
         if tagFolder then pcall(function() tagFolder:Destroy() end) end
-        stopKurooEmote()
         task.spawn(deleteLocalState)
     end)
 end

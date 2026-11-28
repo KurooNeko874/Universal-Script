@@ -832,8 +832,8 @@ LabelSenyum.Parent = TombolIkonEmote
 local WadahWheel = Instance.new("Frame")
 WadahWheel.Name = "WadahWheel"
 WadahWheel.AnchorPoint = Vector2.new(0.5, 0.5)
-WadahWheel.Position = UDim2.new(0.5, 0, 0.5, 4)
-WadahWheel.Size = UDim2.new(0, 560, 0, 598)
+WadahWheel.Position = UDim2.new(0.5, 0, 0.5, 2)
+WadahWheel.Size = UDim2.new(0, 560, 0, 616)
 WadahWheel.BackgroundTransparency = 1
 WadahWheel.Visible = false
 WadahWheel.ZIndex = 10
@@ -1341,7 +1341,7 @@ GarisBerikutnya.Parent = TombolBerikutnya
 local LabelStatus = Instance.new("TextLabel")
 LabelStatus.Name = "LabelStatus"
 LabelStatus.AnchorPoint = Vector2.new(0.5, 0)
-LabelStatus.Position = UDim2.new(0.5, 0, 0, 580)
+LabelStatus.Position = UDim2.new(0.5, 0, 0, 596)
 LabelStatus.Size = UDim2.new(0, 360, 0, 16)
 LabelStatus.BackgroundTransparency = 1
 LabelStatus.Font = Enum.Font.Gotham
@@ -1863,19 +1863,19 @@ local AnimSys = (function()
     stAnim.Transparency = 0.3
     stAnim.Parent = TombolModeAnim
 
-    -- 2) Bar Kategori Animasi (tampil hanya saat Mode Animasi aktif)
+    -- 2) Bar Kategori Animasi (tampil hanya saat Mode Animasi aktif, ukuran besar ramah Mobile)
     local BarKat = Instance.new("Frame")
     BarKat.Name = "BarKategoriAnim"
     BarKat.AnchorPoint = Vector2.new(0.5, 0)
     BarKat.Position = UDim2.new(0.5, 0, 0, 524)
-    BarKat.Size = UDim2.new(0, 540, 0, 52)
+    BarKat.Size = UDim2.new(0, 552, 0, 66)
     BarKat.BackgroundTransparency = 1
     BarKat.Visible = false
     BarKat.ZIndex = 16
     BarKat.Parent = WadahWheel
 
     local Row1 = Instance.new("Frame")
-    Row1.Size = UDim2.new(1, 0, 0, 24)
+    Row1.Size = UDim2.new(1, 0, 0, 30)
     Row1.Position = UDim2.new(0, 0, 0, 0)
     Row1.BackgroundTransparency = 1
     Row1.ZIndex = 16
@@ -1884,12 +1884,12 @@ local AnimSys = (function()
     lay1.FillDirection = Enum.FillDirection.Horizontal
     lay1.HorizontalAlignment = Enum.HorizontalAlignment.Center
     lay1.VerticalAlignment = Enum.VerticalAlignment.Center
-    lay1.Padding = UDim.new(0, 4)
+    lay1.Padding = UDim.new(0, 5)
     lay1.Parent = Row1
 
     local Row2 = Instance.new("Frame")
-    Row2.Size = UDim2.new(1, 0, 0, 24)
-    Row2.Position = UDim2.new(0, 0, 0, 28)
+    Row2.Size = UDim2.new(1, 0, 0, 28)
+    Row2.Position = UDim2.new(0, 0, 0, 34)
     Row2.BackgroundTransparency = 1
     Row2.ZIndex = 16
     Row2.Parent = BarKat
@@ -1897,39 +1897,40 @@ local AnimSys = (function()
     lay2.FillDirection = Enum.FillDirection.Horizontal
     lay2.HorizontalAlignment = Enum.HorizontalAlignment.Center
     lay2.VerticalAlignment = Enum.VerticalAlignment.Center
-    lay2.Padding = UDim.new(0, 6)
+    lay2.Padding = UDim.new(0, 7)
     lay2.Parent = Row2
 
     local catButtons = {}
-    local CATS = { "All Anim", "Idle", "Walk", "Run", "Jump", "Fall", "Climb", "Swim", "Custom" }
+    local CATS = { "All Anim", "Idle", "Walk", "Run", "Climb", "Jump", "Fall", "Swim" }
 
     local function refreshCatHighlight()
         for catName, info in pairs(catButtons) do
             local isSel = (S.SubMode == catName)
-            info.btn.BackgroundColor3 = isSel and (catName == "Custom" and WARNA.Emas or WARNA.Aksen) or WARNA.LatarPanel
+            info.btn.BackgroundColor3 = isSel and WARNA.Aksen or WARNA.LatarPanel
             info.btn.TextColor3 = isSel and Color3.fromRGB(16, 17, 21) or WARNA.TeksUtama
-            info.stroke.Color = isSel and (catName == "Custom" and WARNA.Emas or WARNA.Aksen) or WARNA.GarisPanel
+            info.stroke.Color = isSel and WARNA.Aksen or WARNA.GarisPanel
         end
     end
 
-    for _, catName in ipairs(CATS) do
+    for idx, catName in ipairs(CATS) do
         local b = Instance.new("TextButton")
         b.Name = "Cat_" .. catName
+        b.LayoutOrder = idx
         b.AutomaticSize = Enum.AutomaticSize.X
-        b.Size = UDim2.new(0, 0, 0, 22)
+        b.Size = UDim2.new(0, 0, 0, 28)
         b.BackgroundColor3 = WARNA.LatarPanel
         b.BackgroundTransparency = 0.08
         b.AutoButtonColor = false
         b.Font = Enum.Font.GothamBold
-        b.TextSize = 10
+        b.TextSize = 11
         b.TextColor3 = WARNA.TeksUtama
         b.Text = catName
         b.ZIndex = 17
         b.Parent = Row1
 
         local pad = Instance.new("UIPadding")
-        pad.PaddingLeft = UDim.new(0, 8)
-        pad.PaddingRight = UDim.new(0, 8)
+        pad.PaddingLeft = UDim.new(0, 10)
+        pad.PaddingRight = UDim.new(0, 10)
         pad.Parent = b
 
         local cr = Instance.new("UICorner")
@@ -1938,7 +1939,7 @@ local AnimSys = (function()
 
         local st = Instance.new("UIStroke")
         st.Color = WARNA.GarisPanel
-        st.Thickness = 1.1
+        st.Thickness = 1.2
         st.Parent = b
 
         catButtons[catName] = { btn = b, stroke = st }
@@ -1954,26 +1955,26 @@ local AnimSys = (function()
     local function makeActionBtn(text, color, parent)
         local b = Instance.new("TextButton")
         b.AutomaticSize = Enum.AutomaticSize.X
-        b.Size = UDim2.new(0, 0, 0, 22)
+        b.Size = UDim2.new(0, 0, 0, 26)
         b.BackgroundColor3 = WARNA.LatarPanel
         b.BackgroundTransparency = 0.06
         b.AutoButtonColor = false
         b.Font = Enum.Font.GothamBold
-        b.TextSize = 10
+        b.TextSize = 11
         b.TextColor3 = color
         b.Text = text
         b.ZIndex = 17
         b.Parent = parent
         local pad = Instance.new("UIPadding")
-        pad.PaddingLeft = UDim.new(0, 10)
-        pad.PaddingRight = UDim.new(0, 10)
+        pad.PaddingLeft = UDim.new(0, 12)
+        pad.PaddingRight = UDim.new(0, 12)
         pad.Parent = b
         local cr = Instance.new("UICorner")
         cr.CornerRadius = UDim.new(1, 0)
         cr.Parent = b
         local st = Instance.new("UIStroke")
         st.Color = color
-        st.Thickness = 1.1
+        st.Thickness = 1.2
         st.Transparency = 0.35
         st.Parent = b
         return b, st
@@ -2406,8 +2407,8 @@ local function perbaruiTataLetakResponsif()
 
     -- Skala otomatis seluruh wadah wheel agar pas di layar HP maupun monitor PC
     local skalaX = (ukuranLayar.X * 0.94) / 560
-    local skalaY = (ukuranLayar.Y * 0.88) / 598
-    SkalaWheel.Scale = math.clamp(math.min(skalaX, skalaY), 0.44, 1.02)
+    local skalaY = (ukuranLayar.Y * 0.88) / 616
+    SkalaWheel.Scale = math.clamp(math.min(skalaX, skalaY), 0.42, 1.02)
 
     -- Ukuran tombol ikon senyum menyesuaikan perangkat
     if modeMobile then
@@ -2561,6 +2562,18 @@ local function perbaruiTampilanBintang()
 end
 
 local function perbaruiTombolDaftarFav()
+    if Status.ModeTampilan == "Animasi" then
+        if AnimSys.SubMode == "Custom" then
+            TombolDaftarFav.Text = "←  Semua Animasi"
+            TombolDaftarFav.TextColor3 = WARNA.Aksen
+            GarisDaftarFav.Color = WARNA.Aksen
+        else
+            TombolDaftarFav.Text = "★  Custom (" .. formatAngka(#AnimSys.CustomPacks) .. ")"
+            TombolDaftarFav.TextColor3 = WARNA.Emas
+            GarisDaftarFav.Color = WARNA.Emas
+        end
+        return
+    end
     if Status.ModeTampilan == "Favorit" then
         TombolDaftarFav.Text = "←  Semua Emote (" .. formatAngka(#Status.SemuaEmote) .. ")"
         TombolDaftarFav.TextColor3 = WARNA.Aksen
@@ -2918,9 +2931,18 @@ catatKoneksi(TombolBintang.MouseButton1Click:Connect(function()
     end
 end))
 
--- Tombol Bawah: Beralih antara Semua Emote dan Daftar Favorit
+-- Tombol Bawah: Beralih Favorit (di Emote) / Beralih Custom (di Mode Animasi)
 catatKoneksi(TombolDaftarFav.MouseButton1Click:Connect(function()
-    Status.ModeBintang = false -- Matikan mode bintang otomatis agar tidak salah klik unfav
+    Status.ModeBintang = false -- Matikan mode bintang otomatis agar tidak salah klik unfav/hapus
+    if Status.ModeTampilan == "Animasi" then
+        if AnimSys.SubMode == "Custom" then
+            AnimSys.SubMode = "All Anim"
+        else
+            AnimSys.SubMode = "Custom"
+        end
+        bangunUlangDaftarTampil(true)
+        return
+    end
     if Status.ModeTampilan == "Semua" then
         Status.ModeTampilan = "Favorit"
     else

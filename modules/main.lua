@@ -673,10 +673,79 @@ do
         end,
     })
 
+    -- ========== ALL EMOTE & ANIMASI (DEFAULT OFF, PERSISTENT SAAT DI-ON KAN) ==========
+    local KUROO_EMOTE_URL = "https://raw.githubusercontent.com/KurooNeko874/Universal-Script/refs/heads/main/KurooEmote.lua"
+    local EMOTE_CFG_FILE  = "KurooUniversal_AllEmote.json"
+    local emoteReqId      = 0
+
+    local function loadEmotePref()
+        if typeof(isfile) ~= "function" or typeof(readfile) ~= "function" then return false end
+        local val = false
+        pcall(function()
+            if not isfile(EMOTE_CFG_FILE) then return end
+            local dec = HttpService:JSONDecode(readfile(EMOTE_CFG_FILE))
+            if type(dec) == "table" and type(dec.enabled) == "boolean" then
+                val = dec.enabled
+            end
+        end)
+        return val
+    end
+
+    local function saveEmotePref(state)
+        if typeof(writefile) ~= "function" then return end
+        pcall(function()
+            writefile(EMOTE_CFG_FILE, HttpService:JSONEncode({ enabled = state == true }))
+        end)
+    end
+
+    local function stopKurooEmote()
+        emoteReqId = emoteReqId + 1
+        local env = (typeof(getgenv) == "function" and getgenv()) or _G
+        if type(env.KurooEmoteCleanup) == "function" then
+            pcall(env.KurooEmoteCleanup)
+        end
+    end
+
+    local function startKurooEmote()
+        emoteReqId = emoteReqId + 1
+        local myId = emoteReqId
+        task.spawn(function()
+            local ok, src = pcall(function() return game:HttpGet(KUROO_EMOTE_URL) end)
+            if not ok or type(src) ~= "string" or emoteReqId ~= myId then return end
+            local fn = loadstring(src)
+            if type(fn) == "function" and emoteReqId == myId then
+                pcall(fn)
+            end
+        end)
+    end
+
+    local savedEmoteOn = loadEmotePref()
+    local sectionEmote = tab1:AddSection({ Name = "All Emote & Animasi" })
+    sectionEmote:AddToggle({
+        Name = "All Emote & Animasi",
+        Desc = "Aktifkan roda KurooEmote (62K+ Emote & 12K+ Animasi Marketplace). Jika ON, otomatis aktif saat execute berikutnya.",
+        Default = savedEmoteOn,
+        Callback = function(state)
+            saveEmotePref(state)
+            if state then
+                startKurooEmote()
+                notify("All Emote & Animasi", "Memuat KurooEmote & Animation Wheel...", 2)
+            else
+                stopKurooEmote()
+                notify("All Emote & Animasi", "KurooEmote dimatikan.", 2)
+            end
+        end,
+    })
+
+    if savedEmoteOn then
+        task.delay(0.5, startKurooEmote)
+    end
+
     ExtraMain.Cleanup = function()
         stopFly()
         setNoclip(false)
         infJumpEnabled = false
+        stopKurooEmote()
         if infJumpConn then pcall(function() infJumpConn:Disconnect() end) end
         if charJumpConn then pcall(function() charJumpConn:Disconnect() end) end
         if fpsBoostEnabled then setFpsBooster(false) end
