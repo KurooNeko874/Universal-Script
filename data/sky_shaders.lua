@@ -212,6 +212,38 @@ return {
         Clouds = { Cover = 0.95, Density = 0.9, Color = Color3.fromRGB(120, 128, 140) },
     },
 
+    -- Musim Kabut (Kabut tebal + Ambient Hijau Gelap + Sunset Sinematik)
+    ["Musim Kabut"] = {
+        ClockTime  = 17.65,
+        Brightness = 1.65,
+        Ambient    = Color3.fromRGB(24, 52, 38),
+        Outdoor    = Color3.fromRGB(48, 76, 56),
+        Exposure   = -0.22,
+        Skybox = {
+            Bk = "rbxassetid://15502525195",
+            Dn = "rbxassetid://15502522797",
+            Ft = "rbxassetid://15502524520",
+            Lf = "rbxassetid://15502522129",
+            Rt = "rbxassetid://15502523711",
+            Up = "rbxassetid://15502526102",
+            StarCount = 2500,
+            SunSize   = 24,
+            MoonSize  = 11,
+        },
+        Atmosphere = {
+            Density = 0.62,
+            Offset  = 0.0,
+            Color   = Color3.fromRGB(132, 156, 130),
+            Decay   = Color3.fromRGB(198, 118, 66),
+            Glare   = 0.9,
+            Haze    = 4.5,
+        },
+        Bloom = { Intensity = 0.6, Size = 32, Threshold = 0.85 },
+        CC    = { Brightness = -0.03, Contrast = 0.16, Saturation = -0.05, TintColor = Color3.fromRGB(224, 240, 222) },
+        SunRays = { Intensity = 0.28, Spread = 0.95 },
+        Clouds = { Cover = 0.72, Density = 0.8, Color = Color3.fromRGB(225, 172, 130) },
+    },
+
     -- DLSS / Ultra RTX (Tajam, jernih, sinematik)
     ["DLSS / Ultra RTX"] = {
         ClockTime  = 14.5,

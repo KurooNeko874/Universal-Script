@@ -135,7 +135,13 @@ local function applySkyShaderPreset(presetName)
     for _, origObj in ipairs(originalSkyBackups) do
         pcall(function()
             if origObj and origObj.Parent == Lighting then
-                origObj.Parent = nil
+                if origObj:IsA("Sky") then
+                    if preset.Skybox then
+                        origObj.Parent = nil
+                    end
+                else
+                    origObj.Parent = nil
+                end
             end
         end)
     end
@@ -156,20 +162,22 @@ local function applySkyShaderPreset(presetName)
     Lighting.EnvironmentDiffuseScale  = 0.85
     Lighting.EnvironmentSpecularScale = 0.9
 
-    -- Buat Skybox baru
-    local sky = Instance.new("Sky")
-    sky.Name            = "KurooShaderSky"
-    sky.SkyboxBk        = preset.Skybox.Bk
-    sky.SkyboxDn        = preset.Skybox.Dn
-    sky.SkyboxFt        = preset.Skybox.Ft
-    sky.SkyboxLf        = preset.Skybox.Lf
-    sky.SkyboxRt        = preset.Skybox.Rt
-    sky.SkyboxUp        = preset.Skybox.Up
-    sky.StarCount       = preset.Skybox.StarCount
-    sky.SunAngularSize  = preset.Skybox.SunSize
-    sky.MoonAngularSize = preset.Skybox.MoonSize
-    sky.CelestialBodiesShown = true
-    sky.Parent          = Lighting
+    -- Buat Skybox baru (hanya jika preset mendefinisikan Skybox custom)
+    if preset.Skybox then
+        local sky = Instance.new("Sky")
+        sky.Name            = "KurooShaderSky"
+        sky.SkyboxBk        = preset.Skybox.Bk
+        sky.SkyboxDn        = preset.Skybox.Dn
+        sky.SkyboxFt        = preset.Skybox.Ft
+        sky.SkyboxLf        = preset.Skybox.Lf
+        sky.SkyboxRt        = preset.Skybox.Rt
+        sky.SkyboxUp        = preset.Skybox.Up
+        sky.StarCount       = preset.Skybox.StarCount
+        sky.SunAngularSize  = preset.Skybox.SunSize
+        sky.MoonAngularSize = preset.Skybox.MoonSize
+        sky.CelestialBodiesShown = true
+        sky.Parent          = Lighting
+    end
 
     -- Buat Atmosphere
     local atmo = Instance.new("Atmosphere")
@@ -418,9 +426,188 @@ local function setWeatherMode(mode)
     end)
 end
 
+-- ========== DARKNESS, FOG & CINEMATIC BORDER CONTROLLER ==========
+local VisualEnv = {}
+do
+    local TweenService = game:GetService("TweenService")
+    local CoreGui = game:GetService("CoreGui")
+
+    local darknessLevel = 0
+    local fogLevel = 0
+    local borderEnabled = false
+    local borderGui = nil
+    local origAtmoSnap = nil -- { inst = Atmosphere, Density = number, Haze = number }
+
+    local function getBaseLighting()
+        local p = (activeSkyPreset ~= "Default") and SkyShaderPresets[activeSkyPreset] or nil
+        if p then
+            return p.Brightness or OriginalLightingSnapshot.Brightness,
+                p.Exposure or OriginalLightingSnapshot.ExposureCompensation,
+                p.Ambient or OriginalLightingSnapshot.Ambient,
+                p.Outdoor or OriginalLightingSnapshot.OutdoorAmbient
+        end
+        return OriginalLightingSnapshot.Brightness,
+            OriginalLightingSnapshot.ExposureCompensation,
+            OriginalLightingSnapshot.Ambient,
+            OriginalLightingSnapshot.OutdoorAmbient
+    end
+
+    function VisualEnv.SetDarkness(pct)
+        darknessLevel = math.clamp(tonumber(pct) or 0, 0, 100)
+        local baseBright, baseExp, baseAmb, baseOut = getBaseLighting()
+        local oldCC = Lighting:FindFirstChild("KurooDarknessCC")
+
+        if darknessLevel <= 0 then
+            if oldCC then pcall(function() oldCC:Destroy() end) end
+            Lighting.Brightness           = baseBright
+            Lighting.ExposureCompensation = baseExp
+            Lighting.Ambient              = baseAmb
+            Lighting.OutdoorAmbient       = baseOut
+            return
+        end
+
+        local t = darknessLevel / 100
+        Lighting.Brightness           = baseBright * (1 - t)
+        Lighting.ExposureCompensation = baseExp - (t * 3.8)
+        Lighting.Ambient              = baseAmb:Lerp(Color3.fromRGB(0, 0, 0), t)
+        Lighting.OutdoorAmbient       = baseOut:Lerp(Color3.fromRGB(0, 0, 0), t)
+
+        local cc = oldCC
+        if not cc then
+            cc = Instance.new("ColorCorrectionEffect")
+            cc.Name = "KurooDarknessCC"
+            cc.Parent = Lighting
+        end
+        cc.Enabled    = true
+        cc.Brightness = -(t * 0.55)
+        cc.Contrast   = t * 0.14
+        cc.Saturation = -(t * 0.35)
+    end
+
+    function VisualEnv.SetFog(pct)
+        fogLevel = math.clamp(tonumber(pct) or 0, 0, 100)
+        local customAtmo = Lighting:FindFirstChild("KurooCustomFogAtmo")
+
+        if fogLevel <= 0 then
+            if customAtmo then pcall(function() customAtmo:Destroy() end) end
+            Lighting.FogStart = OriginalLightingSnapshot.FogStart
+            Lighting.FogEnd   = OriginalLightingSnapshot.FogEnd
+            Lighting.FogColor = OriginalLightingSnapshot.FogColor
+
+            local activeAtmo = Lighting:FindFirstChild("KurooShaderAtmosphere")
+            if activeAtmo and activeSkyPreset ~= "Default" and SkyShaderPresets[activeSkyPreset] and SkyShaderPresets[activeSkyPreset].Atmosphere then
+                local a = SkyShaderPresets[activeSkyPreset].Atmosphere
+                activeAtmo.Density = a.Density
+                activeAtmo.Haze    = a.Haze
+            elseif origAtmoSnap and origAtmoSnap.inst and origAtmoSnap.inst.Parent then
+                origAtmoSnap.inst.Density = origAtmoSnap.Density
+                origAtmoSnap.inst.Haze    = origAtmoSnap.Haze
+            end
+            origAtmoSnap = nil
+            return
+        end
+
+        local t = fogLevel / 100
+        Lighting.FogStart = math.max(0, math.floor(35 * (1 - t)))
+        Lighting.FogEnd   = math.floor(1200 * ((1 - t) ^ 2.2) + 18)
+
+        local atmo = Lighting:FindFirstChild("KurooShaderAtmosphere") or Lighting:FindFirstChildOfClass("Atmosphere")
+        if atmo and atmo.Name ~= "KurooCustomFogAtmo" then
+            if not origAtmoSnap or origAtmoSnap.inst ~= atmo then
+                origAtmoSnap = { inst = atmo, Density = atmo.Density, Haze = atmo.Haze }
+            end
+            atmo.Density = math.clamp(0.22 + t * 0.72, 0, 0.96)
+            atmo.Haze    = math.clamp(1.0 + t * 9.0, 0, 10)
+        else
+            if not customAtmo then
+                customAtmo = Instance.new("Atmosphere")
+                customAtmo.Name  = "KurooCustomFogAtmo"
+                customAtmo.Color = Color3.fromRGB(175, 185, 195)
+                customAtmo.Decay = Color3.fromRGB(120, 130, 145)
+                customAtmo.Offset = 0.05
+                customAtmo.Parent = Lighting
+            end
+            customAtmo.Density = math.clamp(0.22 + t * 0.72, 0, 0.96)
+            customAtmo.Haze    = math.clamp(1.0 + t * 9.0, 0, 10)
+        end
+    end
+
+    function VisualEnv.SetCinematicBorder(enabled, instant)
+        borderEnabled = (enabled == true)
+        if not borderEnabled then
+            if borderGui then
+                local g = borderGui
+                borderGui = nil
+                if instant then
+                    pcall(function() g:Destroy() end)
+                else
+                    local top = g:FindFirstChild("TopBar")
+                    local bot = g:FindFirstChild("BottomBar")
+                    local ti = TweenInfo.new(0.32, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+                    if top then pcall(function() TweenService:Create(top, ti, { Size = UDim2.new(1, 0, 0, 0) }):Play() end) end
+                    if bot then pcall(function() TweenService:Create(bot, ti, { Size = UDim2.new(1, 0, 0, 0) }):Play() end) end
+                    task.delay(0.35, function()
+                        if g and g.Parent then pcall(function() g:Destroy() end) end
+                    end)
+                end
+            end
+            return
+        end
+
+        if borderGui and borderGui.Parent then return end
+
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "KurooCinematicBorder"
+        gui.IgnoreGuiInset = true
+        gui.ResetOnSpawn = false
+        gui.DisplayOrder = 1
+        local parented = pcall(function() gui.Parent = CoreGui end)
+        if not parented or not gui.Parent then
+            pcall(function() gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end)
+        end
+        borderGui = gui
+
+        local barHeight = 0.105
+
+        local top = Instance.new("Frame")
+        top.Name = "TopBar"
+        top.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        top.BorderSizePixel = 0
+        top.Active = false
+        top.Position = UDim2.new(0, 0, 0, 0)
+        top.Size = instant and UDim2.new(1, 0, barHeight, 0) or UDim2.new(1, 0, 0, 0)
+        top.Parent = gui
+
+        local bot = Instance.new("Frame")
+        bot.Name = "BottomBar"
+        bot.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        bot.BorderSizePixel = 0
+        bot.Active = false
+        bot.AnchorPoint = Vector2.new(0, 1)
+        bot.Position = UDim2.new(0, 0, 1, 0)
+        bot.Size = instant and UDim2.new(1, 0, barHeight, 0) or UDim2.new(1, 0, 0, 0)
+        bot.Parent = gui
+
+        if not instant then
+            local ti = TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+            pcall(function() TweenService:Create(top, ti, { Size = UDim2.new(1, 0, barHeight, 0) }):Play() end)
+            pcall(function() TweenService:Create(bot, ti, { Size = UDim2.new(1, 0, barHeight, 0) }):Play() end)
+        end
+    end
+
+    function VisualEnv.ResetAll(instant)
+        VisualEnv.SetDarkness(0)
+        VisualEnv.SetFog(0)
+        if instant then
+            VisualEnv.SetCinematicBorder(false, true)
+        end
+    end
+end
+
 local function resetAllVisualShaders()
     setWeatherMode("Normal")
     applySkyShaderPreset("Default")
+    VisualEnv.ResetAll(false)
     Lighting.ClockTime = OriginalLightingSnapshot.ClockTime
     Lighting.FogColor  = OriginalLightingSnapshot.FogColor
     Lighting.FogStart  = OriginalLightingSnapshot.FogStart
@@ -660,6 +847,7 @@ local function disableSeasonMode(instant)
     clearSeasonGifts()
     if Season._StopZoo then pcall(Season._StopZoo) end
     if Season._RestoreWet then pcall(Season._RestoreWet) end
+    VisualEnv.SetCinematicBorder(false, instant == true)
     restoreSeasonMap(instant == true)
     resetAllVisualShaders()
 end
@@ -1078,6 +1266,7 @@ local function applySeasonMode(modeName)
         clearSeasonGifts()
         pcall(XmasZoo.Stop)
         pcall(restoreWetGround)
+        VisualEnv.SetCinematicBorder(false, false)
         activeSeasonMode = "Christmas Winter"
         Season.Active = "Christmas Winter"
         notify("Season Mode", "Mengaktifkan Christmas Winter (Sky + Salju 3D + Snowman + Rusa + Kado)...", 2.5)
@@ -1170,6 +1359,7 @@ local function applySeasonMode(modeName)
     elseif modeName == "Musim Hujan" then
         clearSeasonGifts()
         pcall(XmasZoo.Stop)
+        VisualEnv.SetCinematicBorder(false, false)
         restoreSeasonMap(true)
         activeSeasonMode = "Musim Hujan"
         Season.Active = "Musim Hujan"
@@ -1200,6 +1390,54 @@ local function applySeasonMode(modeName)
         setWeatherMode("Hujan (Rain)")
         applyWetGround(1.0)
         notify("Season Mode", "Musim Hujan aktif sepenuhnya!", 2.5)
+    elseif modeName == "Musim Kabut" then
+        clearSeasonGifts()
+        pcall(XmasZoo.Stop)
+        pcall(restoreWetGround)
+        restoreSeasonMap(true)
+        setWeatherMode("Normal")
+        activeSeasonMode = "Musim Kabut"
+        Season.Active = "Musim Kabut"
+        notify("Season Mode", "Mengaktifkan Musim Kabut (Kabut Tebal + Hijau Gelap Sunset + Cinematic Border)...", 2.5)
+
+        if not SkyShaderPresets["Musim Kabut"] then
+            SkyShaderPresets["Musim Kabut"] = {
+                ClockTime  = 17.65,
+                Brightness = 1.65,
+                Ambient    = Color3.fromRGB(24, 52, 38),
+                Outdoor    = Color3.fromRGB(48, 76, 56),
+                Exposure   = -0.22,
+                Skybox = {
+                    Bk = "rbxassetid://15502525195",
+                    Dn = "rbxassetid://15502522797",
+                    Ft = "rbxassetid://15502524520",
+                    Lf = "rbxassetid://15502522129",
+                    Rt = "rbxassetid://15502523711",
+                    Up = "rbxassetid://15502526102",
+                    StarCount = 2500,
+                    SunSize   = 24,
+                    MoonSize  = 11,
+                },
+                Atmosphere = {
+                    Density = 0.62,
+                    Offset  = 0.0,
+                    Color   = Color3.fromRGB(132, 156, 130),
+                    Decay   = Color3.fromRGB(198, 118, 66),
+                    Glare   = 0.9,
+                    Haze    = 4.5,
+                },
+                Bloom = { Intensity = 0.6, Size = 32, Threshold = 0.85 },
+                CC    = { Brightness = -0.03, Contrast = 0.16, Saturation = -0.05, TintColor = Color3.fromRGB(224, 240, 222) },
+                SunRays = { Intensity = 0.28, Spread = 0.95 },
+                Clouds = { Cover = 0.72, Density = 0.8, Color = Color3.fromRGB(225, 172, 130) },
+            }
+        end
+        applySkyShaderPreset("Musim Kabut")
+        Lighting.FogColor = Color3.fromRGB(72, 92, 76)
+        Lighting.FogStart = 12
+        Lighting.FogEnd   = 240
+        VisualEnv.SetCinematicBorder(true, false)
+        notify("Season Mode", "Musim Kabut aktif! (Cinematic Border + Sunset Hijau Gelap)", 2.5)
     end
 end
 
@@ -1222,6 +1460,7 @@ seasonDropdown = sectionSeason:AddDropdown({
         "Normal (OFF)",
         "Christmas Winter",
         "Musim Hujan",
+        "Musim Kabut",
     },
     Default = "Normal (OFF)",
     Callback = function(modeName)
@@ -1232,7 +1471,7 @@ seasonDropdown = sectionSeason:AddDropdown({
 
 sectionSeason:AddButton({
     Name = "Reset Season Mode",
-    Desc = "Kembalikan Terrain, Part, Sky & Salju ke kondisi asli map",
+    Desc = "Kembalikan Terrain, Part, Sky & Efek Musim ke kondisi asli map",
     Callback = function()
         isSyncingSeasonUI = true
         Season.Disable(false)
@@ -1243,23 +1482,68 @@ sectionSeason:AddButton({
 })
 end
 
-local sectionBrightness = tabVisuals:AddSection({ Name = "Brightness" })
-local brightnessSlider = sectionBrightness:AddSlider({
+local sectionBrightness = tabVisuals:AddSection({ Name = "Lighting, Fog & Darkness" })
+local isSyncingEnvUI = false
+local darknessSlider, fogSlider, brightnessSlider, cinematicBorderToggle
+
+darknessSlider = sectionBrightness:AddSlider({
+    Name = "Darkness (Kegelapan)",
+    Desc = "Gelapkan map secara nyata (Exposure + Ambient + ColorCorrection)",
+    Min = 0,
+    Max = 100,
+    Default = 0,
+    Callback = function(val)
+        if isSyncingEnvUI then return end
+        VisualEnv.SetDarkness(val)
+    end,
+})
+
+fogSlider = sectionBrightness:AddSlider({
+    Name = "Fog Intensity (Kabut)",
+    Desc = "Atur ketebalan kabut & jarak pandang secara real-time",
+    Min = 0,
+    Max = 100,
+    Default = 0,
+    Callback = function(val)
+        if isSyncingEnvUI then return end
+        VisualEnv.SetFog(val)
+    end,
+})
+
+brightnessSlider = sectionBrightness:AddSlider({
     Name = "Brightness",
     Min = 0,
     Max = 10,
     Default = math.clamp(math.floor(originalBrightness + 0.5), 0, 10),
     Callback = function(val)
+        if isSyncingEnvUI then return end
         setBrightness(val)
     end,
 })
 
+cinematicBorderToggle = sectionBrightness:AddToggle({
+    Name = "Cinematic Border (Atas-Bawah)",
+    Desc = "Tambahkan garis hitam sinematik atas & bawah layar",
+    Default = false,
+    Callback = function(state)
+        if isSyncingEnvUI then return end
+        VisualEnv.SetCinematicBorder(state, false)
+    end,
+})
+
 sectionBrightness:AddButton({
-    Name = "Reset Brightness",
+    Name = "Reset Lighting, Fog & Darkness",
     Callback = function()
+        isSyncingEnvUI = true
+        VisualEnv.ResetAll(false)
+        VisualEnv.SetCinematicBorder(false, false)
         resetBrightness()
-        brightnessSlider:Set(math.clamp(math.floor(originalBrightness + 0.5), 0, 10))
-        notify("Brightness", "Reset ke default", 2)
+        if darknessSlider        then pcall(function() darknessSlider:Set(0) end) end
+        if fogSlider             then pcall(function() fogSlider:Set(0) end) end
+        if brightnessSlider      then pcall(function() brightnessSlider:Set(math.clamp(math.floor(originalBrightness + 0.5), 0, 10)) end) end
+        if cinematicBorderToggle then pcall(function() cinematicBorderToggle:Set(false) end) end
+        isSyncingEnvUI = false
+        notify("Lighting & Fog", "Kegelapan, kabut & brightness dikembalikan ke default.", 2)
     end,
 })
 
@@ -1378,6 +1662,10 @@ sectionTheme:AddColorPicker({
             if Season and Season.Active ~= "Normal (OFF)" and Season.Disable then
                 Season.Disable(true)
             end
+        end)
+        pcall(function()
+            VisualEnv.ResetAll(true)
+            VisualEnv.SetCinematicBorder(false, true)
         end)
     end)
 end
