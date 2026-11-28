@@ -158,4 +158,36 @@ return {
         SunRays = { Intensity = 0.1, Spread = 0.75 },
         Clouds = { Cover = 0.72, Density = 0.8, Color = Color3.fromRGB(235, 195, 225) },
     },
+
+    -- Christmas Winter (Seamless 360° Overcast Winter Sky + Frosty Atmosphere)
+    ["Christmas Winter"] = {
+        ClockTime  = 15.8,
+        Brightness = 2.45,
+        Ambient    = Color3.fromRGB(145, 165, 190),
+        Outdoor    = Color3.fromRGB(185, 205, 228),
+        Exposure   = 0.14,
+        Skybox = {
+            Bk = "rbxassetid://18603249071",
+            Dn = "rbxassetid://18603241716",
+            Ft = "rbxassetid://18603244510",
+            Lf = "rbxassetid://18603245276",
+            Rt = "rbxassetid://18603246382",
+            Up = "rbxassetid://18603261859",
+            StarCount = 3000,
+            SunSize   = 22,
+            MoonSize  = 12,
+        },
+        Atmosphere = {
+            Density = 0.42,
+            Offset  = 0.15,
+            Color   = Color3.fromRGB(218, 232, 248),
+            Decay   = Color3.fromRGB(165, 195, 228),
+            Glare   = 0.35,
+            Haze    = 2.4,
+        },
+        Bloom = { Intensity = 0.65, Size = 26, Threshold = 0.88 },
+        CC    = { Brightness = 0.03, Contrast = 0.1, Saturation = -0.12, TintColor = Color3.fromRGB(236, 246, 255) },
+        SunRays = { Intensity = 0.1, Spread = 0.8 },
+        Clouds = { Cover = 0.78, Density = 0.75, Color = Color3.fromRGB(238, 246, 255) },
+    },
 }
