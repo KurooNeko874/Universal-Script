@@ -184,176 +184,6 @@ do
     end
 end
 
--- ========== RAIN PUDDLES (EFEK BECEK / GENANGAN AIR + CIPRATAN KAKI) ==========
-local RainPuddles = {}
-do
-    local folder = nil
-    local conn = nil
-    local footAtt = nil
-    local footEmitter = nil
-    local lastCenter = nil
-    local active = false
-
-    local function clearFootSplash()
-        if footEmitter then pcall(function() footEmitter:Destroy() end); footEmitter = nil end
-        if footAtt then pcall(function() footAtt:Destroy() end); footAtt = nil end
-    end
-
-    local function ensureFootSplash()
-        local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if not root then return nil end
-        if footAtt and footAtt.Parent == root and footEmitter and footEmitter.Parent == footAtt then
-            return footEmitter
-        end
-        clearFootSplash()
-        local att = Instance.new("Attachment")
-        att.Name = "KurooFootSplashAtt"
-        att.Position = Vector3.new(0, -2.75, 0)
-        att.Parent = root
-        footAtt = att
-
-        local em = Instance.new("ParticleEmitter")
-        em.Name = "KurooFootSplash"
-        em.Color = ColorSequence.new(Color3.fromRGB(190, 210, 225))
-        em.Transparency = NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 0.2),
-            NumberSequenceKeypoint.new(0.7, 0.55),
-            NumberSequenceKeypoint.new(1, 1),
-        })
-        em.Size = NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 0.12),
-            NumberSequenceKeypoint.new(0.5, 0.24),
-            NumberSequenceKeypoint.new(1, 0.06),
-        })
-        em.Speed = NumberRange.new(4, 9)
-        em.Acceleration = Vector3.new(0, -26, 0)
-        em.Lifetime = NumberRange.new(0.22, 0.38)
-        em.SpreadAngle = Vector2.new(65, 65)
-        em.EmissionDirection = Enum.NormalId.Top
-        em.Rate = 0
-        em.Parent = att
-        footEmitter = em
-        return em
-    end
-
-    local function spawnPuddlesAround(origin)
-        if folder then pcall(function() folder:Destroy() end); folder = nil end
-        local f = Instance.new("Folder")
-        f.Name = "KurooRainPuddles"
-        f.Parent = workspace
-        folder = f
-
-        local rp = RaycastParams.new()
-        rp.FilterType = Enum.RaycastFilterType.Exclude
-        local excl = { f }
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p.Character then table.insert(excl, p.Character) end
-        end
-        rp.FilterDescendantsInstances = excl
-
-        local targetCount = isMobile and 14 or 26
-        local spawned = 0
-        local attempts = 0
-
-        while spawned < targetCount and attempts < targetCount * 4 do
-            attempts = attempts + 1
-            local ang = math.random() * math.pi * 2
-            local dist = 6 + math.random() * 68
-            local rx = origin.X + math.cos(ang) * dist
-            local rz = origin.Z + math.sin(ang) * dist
-            local res = workspace:Raycast(Vector3.new(rx, origin.Y + 45, rz), Vector3.new(0, -110, 0), rp)
-            if res and res.Normal.Y >= 0.8 then
-                local hit = res.Instance
-                local okSurface = hit:IsA("Terrain") or (hit:IsA("BasePart") and hit.Anchored and hit.CanCollide and hit.Transparency < 0.5)
-                if okSurface then
-                    local diam = 4.2 + math.random() * 8.5
-                    local puddle = Instance.new("Part")
-                    puddle.Name = "KurooPuddle"
-                    puddle.Shape = Enum.PartType.Cylinder
-                    puddle.Anchored = true
-                    puddle.CanCollide = false
-                    puddle.CanTouch = false
-                    puddle.CanQuery = false
-                    puddle.CastShadow = false
-                    puddle.Material = Enum.Material.Glass
-                    puddle.Reflectance = 0.78
-                    puddle.Transparency = 0.28
-                    puddle.Color = Color3.fromRGB(34, 46, 56)
-                    -- Cylinder di Roblox memanjang di sumbu X -> putar Z 90 derajat agar pipih di tanah
-                    puddle.Size = Vector3.new(0.06, diam, diam * (0.72 + math.random() * 0.45))
-                    local up = res.Normal.Unit
-                    local right = up:Cross(Vector3.new(0, 0, 1))
-                    if right.Magnitude < 0.01 then right = up:Cross(Vector3.new(1, 0, 0)) end
-                    right = right.Unit
-                    local back = right:Cross(up).Unit
-                    local surfCF = CFrame.fromMatrix(res.Position + up * 0.04, right, up, back)
-                    puddle.CFrame = surfCF * CFrame.Angles(0, math.random() * math.pi * 2, math.rad(90))
-                    puddle.Parent = f
-
-                    -- Cipratan rintik hujan kecil di permukaan genangan
-                    local rip = Instance.new("ParticleEmitter")
-                    rip.Name = "PuddleSplash"
-                    rip.EmissionDirection = Enum.NormalId.Right
-                    rip.Color = ColorSequence.new(Color3.fromRGB(205, 222, 238))
-                    rip.Transparency = NumberSequence.new({
-                        NumberSequenceKeypoint.new(0, 0.25),
-                        NumberSequenceKeypoint.new(1, 1),
-                    })
-                    rip.Size = NumberSequence.new({
-                        NumberSequenceKeypoint.new(0, 0.1),
-                        NumberSequenceKeypoint.new(1, 0.22),
-                    })
-                    rip.Speed = NumberRange.new(2.2, 4.5)
-                    rip.Acceleration = Vector3.new(0, -18, 0)
-                    rip.Lifetime = NumberRange.new(0.18, 0.32)
-                    rip.SpreadAngle = Vector2.new(35, 35)
-                    rip.Rate = isMobile and 4 or 9
-                    rip.Parent = puddle
-
-                    spawned = spawned + 1
-                end
-            end
-        end
-        lastCenter = origin
-    end
-
-    function RainPuddles.Start()
-        if active then return end
-        active = true
-        local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        local cam = getCamera()
-        local origin = (root and root.Position) or (cam and cam.CFrame.Position) or Vector3.new(0, 10, 0)
-        pcall(spawnPuddlesAround, origin)
-
-        conn = RunService.Heartbeat:Connect(function()
-            if not active then return end
-            local c = LocalPlayer.Character
-            local r = c and c:FindFirstChild("HumanoidRootPart")
-            local h = c and c:FindFirstChildOfClass("Humanoid")
-            if r then
-                if not lastCenter or (r.Position - lastCenter).Magnitude > 75 then
-                    pcall(spawnPuddlesAround, r.Position)
-                end
-                local em = ensureFootSplash()
-                if em and h then
-                    local movingOnGround = (h.MoveDirection.Magnitude > 0.1) and (h.FloorMaterial ~= Enum.Material.Air)
-                    em.Rate = movingOnGround and (isMobile and 12 or 24) or 0
-                end
-            end
-        end)
-    end
-
-    function RainPuddles.Stop()
-        active = false
-        lastCenter = nil
-        if conn then conn:Disconnect(); conn = nil end
-        clearFootSplash()
-        if folder then pcall(function() folder:Destroy() end); folder = nil end
-    end
-end
-
 local KUROO_SHADER_NAMES = {
     KurooShaderSky        = true,
     KurooShaderAtmosphere = true,
@@ -580,7 +410,6 @@ local function setWeatherMode(mode)
         pcall(function() weatherSplashPart:Destroy() end)
         weatherSplashPart = nil
     end
-    RainPuddles.Stop()
     clear3DSnowflakes()
 
     if mode == "Normal" then
@@ -668,8 +497,7 @@ local function setWeatherMode(mode)
         spe.Rate = isMobile and 45 or 140
         spe.Parent = sp
 
-        -- Aktifkan genangan becek & suara hujan deras
-        RainPuddles.Start()
+        -- Aktifkan suara hujan deras
         SeasonAudio.Play("HeavyRain")
     elseif mode == "Snowfall (Salju)" then
         -- Built-in Roblox sparkle/snowflake texture (100% pasti tampil di semua executor!)
@@ -729,6 +557,81 @@ local function setWeatherMode(mode)
                 rotSpeedY = (math.random() - 0.5) * 2.6,
             })
             core.CFrame = CFrame.new(origin + Snow3D.flakes[i].offset)
+        end
+    elseif mode == "Daun Gugur (Autumn)" then
+        -- Partikel serpihan daun kering gugur + 3D Falling Dry Leaves berputar tertiup angin
+        pe.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+        pe.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(224, 138, 44)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(196, 86, 32)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(148, 84, 34)),
+        })
+        pe.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.15),
+            NumberSequenceKeypoint.new(0.85, 0.25),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+        pe.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.35),
+            NumberSequenceKeypoint.new(0.5, 0.48),
+            NumberSequenceKeypoint.new(1, 0.2),
+        })
+        pe.Speed = NumberRange.new(5, 10)
+        pe.Lifetime = NumberRange.new(4.2, 6.2)
+        pe.Rate = isMobile and 45 or 85
+        pe.SpreadAngle = Vector2.new(32, 32)
+        pe.Rotation = NumberRange.new(0, 360)
+        pe.RotSpeed = NumberRange.new(-95, 95)
+        pe.Drag = 0.2
+        pe.LightEmission = 0.08
+
+        local folder = Instance.new("Folder")
+        folder.Name = "KurooAutumnLeaves3D"
+        folder.Parent = workspace
+        Snow3D.folder = folder
+
+        local cam = getCamera()
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local origin = (root and root.Position) or (cam and cam.CFrame.Position) or Vector3.new(0, 20, 0)
+
+        local leafPalette = {
+            Color3.fromRGB(214, 96, 32),   -- Burnt Orange
+            Color3.fromRGB(228, 162, 48),  -- Golden Amber
+            Color3.fromRGB(178, 54, 34),   -- Dry Crimson
+            Color3.fromRGB(156, 98, 42),   -- Golden Brown
+            Color3.fromRGB(198, 124, 38),  -- Autumn Ochre
+        }
+        local leafCount = isMobile and 24 or 44
+        for i = 1, leafCount do
+            local leaf = Instance.new("Part")
+            leaf.Name = "AutumnLeaf3D"
+            local sc = 0.7 + math.random() * 0.55
+            leaf.Size = Vector3.new(0.85 * sc, 0.05, 0.5 * sc)
+            leaf.Color = leafPalette[math.random(1, #leafPalette)]
+            leaf.Material = Enum.Material.SmoothPlastic
+            leaf.Anchored = true
+            leaf.CanCollide = false
+            leaf.CanTouch = false
+            leaf.CanQuery = false
+            leaf.CastShadow = false
+            leaf.Parent = folder
+
+            table.insert(Snow3D.flakes, {
+                model = leaf,
+                core = leaf,
+                arms = {},
+                offset = Vector3.new(math.random(-44, 44), math.random(-4, 32), math.random(-44, 44)),
+                fallSpeed = 2.6 + math.random() * 3.0,
+                swayAmp = 2.4 + math.random() * 3.0,
+                swayFreq = 0.9 + math.random() * 1.1,
+                phase = math.random() * math.pi * 2,
+                rotX = math.random() * math.pi * 2,
+                rotY = math.random() * math.pi * 2,
+                rotSpeedX = (math.random() - 0.5) * 3.4,
+                rotSpeedY = (math.random() - 0.5) * 3.8,
+            })
+            leaf.CFrame = CFrame.new(origin + Snow3D.flakes[i].offset)
         end
     end
 
@@ -1195,7 +1098,6 @@ local function disableSeasonMode(instant)
     clearSeasonGifts()
     if Season._StopZoo then pcall(Season._StopZoo) end
     if Season._RestoreWet then pcall(Season._RestoreWet) end
-    RainPuddles.Stop()
     SeasonAudio.Stop(instant == true)
     VisualEnv.SetCinematicBorder(false, instant == true)
     restoreSeasonMap(instant == true)
@@ -1790,6 +1692,122 @@ local function applySeasonMode(modeName)
         VisualEnv.SetCinematicBorder(true, false)
         SeasonAudio.Play("MistWind")
         notify("Season Mode", "Musim Kabut aktif! (Cinematic Border + Sunset Hijau Gelap + Angin Kabut)", 2.5)
+    elseif modeName == "Musim Gugur (Autumn)" then
+        clearSeasonGifts()
+        pcall(XmasZoo.Stop)
+        pcall(restoreWetGround)
+        VisualEnv.SetCinematicBorder(false, false)
+        restoreSeasonMap(true)
+        activeSeasonMode = "Musim Gugur (Autumn)"
+        Season.Active = "Musim Gugur (Autumn)"
+        notify("Season Mode", "Mengaktifkan Musim Gugur (Golden Brown + Terrain Autumn + Daun Kering Gugur)...", 2.5)
+
+        if not SkyShaderPresets["Musim Gugur (Autumn)"] then
+            SkyShaderPresets["Musim Gugur (Autumn)"] = {
+                ClockTime  = 16.6,
+                Brightness = 2.35,
+                Ambient    = Color3.fromRGB(132, 92, 48),
+                Outdoor    = Color3.fromRGB(185, 134, 72),
+                Exposure   = 0.08,
+                Skybox = {
+                    Bk = "rbxassetid://15502525195",
+                    Dn = "rbxassetid://15502522797",
+                    Ft = "rbxassetid://15502524520",
+                    Lf = "rbxassetid://15502522129",
+                    Rt = "rbxassetid://15502523711",
+                    Up = "rbxassetid://15502526102",
+                    StarCount = 2000,
+                    SunSize   = 22,
+                    MoonSize  = 11,
+                },
+                Atmosphere = {
+                    Density = 0.34,
+                    Offset  = 0.16,
+                    Color   = Color3.fromRGB(235, 188, 128),
+                    Decay   = Color3.fromRGB(186, 118, 56),
+                    Glare   = 0.65,
+                    Haze    = 2.1,
+                },
+                Bloom = { Intensity = 0.52, Size = 28, Threshold = 0.9 },
+                CC    = { Brightness = 0.02, Contrast = 0.16, Saturation = 0.12, TintColor = Color3.fromRGB(255, 228, 188) },
+                SunRays = { Intensity = 0.24, Spread = 0.88 },
+                Clouds = { Cover = 0.55, Density = 0.65, Color = Color3.fromRGB(252, 214, 165) },
+            }
+        end
+        applySkyShaderPreset("Musim Gugur (Autumn)")
+        setWeatherMode("Daun Gugur (Autumn)")
+        SeasonAudio.Play("MistWind")
+
+        -- Ubah warna Terrain menjadi nuansa Golden Brown / Autumn
+        local autumnTerrainColors = {
+            [Enum.Material.Grass]      = Color3.fromRGB(184, 126, 52),
+            [Enum.Material.LeafyGrass] = Color3.fromRGB(196, 114, 42),
+            [Enum.Material.Ground]     = Color3.fromRGB(134, 88, 48),
+            [Enum.Material.Mud]        = Color3.fromRGB(110, 72, 42),
+            [Enum.Material.Sand]       = Color3.fromRGB(198, 152, 86),
+            [Enum.Material.Rock]       = Color3.fromRGB(128, 108, 86),
+            [Enum.Material.Slate]      = Color3.fromRGB(122, 104, 84),
+            [Enum.Material.Snow]       = Color3.fromRGB(214, 178, 128),
+        }
+        local terrain = workspace:FindFirstChildOfClass("Terrain")
+        if terrain then
+            for mat, autCol in pairs(autumnTerrainColors) do
+                if seasonTerrainSnapshots[mat] == nil then
+                    local ok, orig = pcall(function() return terrain:GetMaterialColor(mat) end)
+                    if ok and orig then
+                        seasonTerrainSnapshots[mat] = orig
+                    end
+                end
+                pcall(function()
+                    terrain:SetMaterialColor(mat, autCol)
+                end)
+            end
+        end
+
+        -- Ubah Part rumput / daun / tanah di Workspace menjadi warna musim gugur secara bertahap
+        task.spawn(function()
+            local foliageCols = {
+                Color3.fromRGB(204, 102, 34),
+                Color3.fromRGB(216, 148, 44),
+                Color3.fromRGB(172, 66, 32),
+                Color3.fromRGB(168, 106, 42),
+            }
+            local descendants = workspace:GetDescendants()
+            local processed = 0
+            for _, inst in ipairs(descendants) do
+                if seasonTaskId ~= myTaskId then return end
+                if shouldSnowifyPart(inst) then
+                    if not seasonPartSnapshots[inst] then
+                        seasonPartSnapshots[inst] = {
+                            Color = inst.Color,
+                            Material = inst.Material,
+                        }
+                    end
+                    local lname = string.lower(inst.Name)
+                    local isFoliage = lname:find("leaf", 1, true) or lname:find("leaves", 1, true)
+                        or lname:find("foliage", 1, true) or lname:find("bush", 1, true)
+                        or lname:find("tree", 1, true) or lname:find("daun", 1, true)
+                        or lname:find("hedge", 1, true)
+                    local isStone = (inst.Material == Enum.Material.Rock or inst.Material == Enum.Material.Slate)
+                    pcall(function()
+                        if isFoliage then
+                            inst.Color = foliageCols[math.random(1, #foliageCols)]
+                        elseif isStone then
+                            inst.Color = Color3.fromRGB(132, 110, 88)
+                        else
+                            inst.Color = Color3.fromRGB(174, 118, 52)
+                        end
+                    end)
+                end
+                processed = processed + 1
+                if processed % 350 == 0 then
+                    task.wait()
+                end
+            end
+            if seasonTaskId == myTaskId then
+                notify("Season Mode", "Musim Gugur (Autumn) aktif sepenuhnya!", 2.5)
+            end
+        end)
     end
 end
 
@@ -1813,6 +1831,7 @@ seasonDropdown = sectionSeason:AddDropdown({
         "Christmas Winter",
         "Musim Hujan",
         "Musim Kabut",
+        "Musim Gugur (Autumn)",
     },
     Default = "Normal (OFF)",
     Callback = function(modeName)
@@ -1970,6 +1989,7 @@ weatherDropdown = sectionShader:AddDropdown({
         "Normal",
         "Hujan (Rain)",
         "Snowfall (Salju)",
+        "Daun Gugur (Autumn)",
     },
     Default = "Normal",
     Callback = function(mode)
@@ -2035,7 +2055,6 @@ sectionTheme:AddColorPicker({
             end
         end)
         pcall(function()
-            RainPuddles.Stop()
             SeasonAudio.Stop(true)
             VisualEnv.ResetAll(true)
             VisualEnv.SetCinematicBorder(false, true)

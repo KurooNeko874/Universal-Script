@@ -244,6 +244,38 @@ return {
         Clouds = { Cover = 0.72, Density = 0.8, Color = Color3.fromRGB(225, 172, 130) },
     },
 
+    -- Musim Gugur / Autumn (Ambient Golden Brown + Cahaya Sore Hangat)
+    ["Musim Gugur (Autumn)"] = {
+        ClockTime  = 16.6,
+        Brightness = 2.35,
+        Ambient    = Color3.fromRGB(132, 92, 48),
+        Outdoor    = Color3.fromRGB(185, 134, 72),
+        Exposure   = 0.08,
+        Skybox = {
+            Bk = "rbxassetid://15502525195",
+            Dn = "rbxassetid://15502522797",
+            Ft = "rbxassetid://15502524520",
+            Lf = "rbxassetid://15502522129",
+            Rt = "rbxassetid://15502523711",
+            Up = "rbxassetid://15502526102",
+            StarCount = 2000,
+            SunSize   = 22,
+            MoonSize  = 11,
+        },
+        Atmosphere = {
+            Density = 0.34,
+            Offset  = 0.16,
+            Color   = Color3.fromRGB(235, 188, 128),
+            Decay   = Color3.fromRGB(186, 118, 56),
+            Glare   = 0.65,
+            Haze    = 2.1,
+        },
+        Bloom = { Intensity = 0.52, Size = 28, Threshold = 0.9 },
+        CC    = { Brightness = 0.02, Contrast = 0.16, Saturation = 0.12, TintColor = Color3.fromRGB(255, 228, 188) },
+        SunRays = { Intensity = 0.24, Spread = 0.88 },
+        Clouds = { Cover = 0.55, Density = 0.65, Color = Color3.fromRGB(252, 214, 165) },
+    },
+
     -- DLSS / Ultra RTX (Tajam, jernih, sinematik)
     ["DLSS / Ultra RTX"] = {
         ClockTime  = 14.5,
