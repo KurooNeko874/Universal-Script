@@ -322,7 +322,372 @@ section1:AddButton({
 })
 
     ctx.mainTab = tab1
+
+-- ========== MOVEMENT (ADMIN FLY, NOCLIP, INFINITE JUMP) & FPS BOOSTER ==========
+local ExtraMain = {}
+do
+    local flyEnabled = false
+    local flySpeed = 60
+    local flyConn = nil
+    local flyBV = nil
+    local flyBG = nil
+    local flyDisabledAnimate = nil
+
+    local function stopFly()
+        flyEnabled = false
+        if flyConn then flyConn:Disconnect(); flyConn = nil end
+        if flyBV then pcall(function() flyBV:Destroy() end); flyBV = nil end
+        if flyBG then pcall(function() flyBG:Destroy() end); flyBG = nil end
+        if flyDisabledAnimate and flyDisabledAnimate.Parent then
+            pcall(function() flyDisabledAnimate.Disabled = false end)
+        end
+        flyDisabledAnimate = nil
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            pcall(function() hum.PlatformStand = false end)
+        end
+    end
+
+    local function startFly()
+        stopFly()
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not root or not hum then
+            notify("Fly", "Karakter belum siap!", 2)
+            return false
+        end
+
+        flyEnabled = true
+        -- Pose diam berdiri tegak seperti Admin Map (PlatformStand + stop semua animasi)
+        pcall(function() hum.PlatformStand = true end)
+        local animScript = char:FindFirstChild("Animate")
+        if animScript and animScript:IsA("LocalScript") and not animScript.Disabled then
+            pcall(function() animScript.Disabled = true end)
+            flyDisabledAnimate = animScript
+        end
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if animator then
+            for _, tr in ipairs(animator:GetPlayingAnimationTracks()) do
+                pcall(function() tr:Stop(0) end)
+            end
+        end
+
+        local bv = Instance.new("BodyVelocity")
+        bv.Name = "KurooAdminFlyBV"
+        bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        bv.Velocity = Vector3.zero
+        bv.Parent = root
+        flyBV = bv
+
+        local bg = Instance.new("BodyGyro")
+        bg.Name = "KurooAdminFlyBG"
+        bg.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+        bg.P = 9e4
+        bg.D = 1200
+        bg.CFrame = root.CFrame
+        bg.Parent = root
+        flyBG = bg
+
+        flyConn = RunService.RenderStepped:Connect(function()
+            if not flyEnabled then return end
+            local c = LocalPlayer.Character
+            local r = c and c:FindFirstChild("HumanoidRootPart")
+            local h = c and c:FindFirstChildOfClass("Humanoid")
+            local cam = getCamera()
+            if not r or not h or not cam or not flyBV or not flyBV.Parent or not flyBG or not flyBG.Parent then
+                stopFly()
+                return
+            end
+
+            -- Pastikan karakter tetap diam tegak (dummy/admin pose)
+            if not h.PlatformStand then
+                pcall(function() h.PlatformStand = true end)
+            end
+
+            -- Kunci orientasi tetap tegak menghadap arah horizontal kamera (tidak miring/nungging)
+            local lookFlat = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
+            if lookFlat.Magnitude > 0.01 then
+                flyBG.CFrame = CFrame.lookAt(r.Position, r.Position + lookFlat.Unit)
+            end
+
+            local moveVec = Vector3.zero
+            if not UserInputService:GetFocusedTextBox() then
+                if isMobile then
+                    -- Mobile: gunakan joystick MoveDirection diproyeksikan ke arah kamera 3D
+                    local md = h.MoveDirection
+                    if md.Magnitude > 0.05 then
+                        local camFlatLook = lookFlat.Magnitude > 0.01 and lookFlat.Unit or Vector3.new(0, 0, -1)
+                        local camFlatRight = Vector3.new(cam.CFrame.RightVector.X, 0, cam.CFrame.RightVector.Z)
+                        camFlatRight = camFlatRight.Magnitude > 0.01 and camFlatRight.Unit or Vector3.new(1, 0, 0)
+                        local fwdAmt = md:Dot(camFlatLook)
+                        local rightAmt = md:Dot(camFlatRight)
+                        moveVec = (cam.CFrame.LookVector * fwdAmt) + (cam.CFrame.RightVector * rightAmt)
+                    end
+                else
+                    if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVec = moveVec + cam.CFrame.LookVector end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVec = moveVec - cam.CFrame.LookVector end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVec = moveVec + cam.CFrame.RightVector end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec = moveVec - cam.CFrame.RightVector end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsKeyDown(Enum.KeyCode.E) then
+                        moveVec = moveVec + Vector3.new(0, 1, 0)
+                    end
+                    if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.Q) then
+                        moveVec = moveVec - Vector3.new(0, 1, 0)
+                    end
+                end
+            end
+
+            if moveVec.Magnitude > 0.01 then
+                local mult = (not isMobile and UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)) and 1.8 or 1.0
+                flyBV.Velocity = moveVec.Unit * (flySpeed * mult)
+            else
+                flyBV.Velocity = Vector3.zero
+            end
+        end)
+        return true
+    end
+
+    -- Noclip
+    local noclipEnabled = false
+    local noclipConn = nil
+
+    local function setNoclip(state)
+        noclipEnabled = state
+        if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
+        if state then
+            noclipConn = RunService.Stepped:Connect(function()
+                if not noclipEnabled then return end
+                local c = LocalPlayer.Character
+                if not c then return end
+                for _, p in ipairs(c:GetDescendants()) do
+                    if p:IsA("BasePart") and p.CanCollide then
+                        p.CanCollide = false
+                    end
+                end
+            end)
+        else
+            local c = LocalPlayer.Character
+            if c then
+                for _, name in ipairs({ "HumanoidRootPart", "Torso", "UpperTorso", "LowerTorso", "Head" }) do
+                    local p = c:FindFirstChild(name)
+                    if p and p:IsA("BasePart") then
+                        pcall(function() p.CanCollide = true end)
+                    end
+                end
+            end
+        end
+    end
+
+    -- Infinite Jump & JumpPower
+    local infJumpEnabled = false
+    local customJumpPower = nil
+    local defaultJumpPower = 50
+    do
+        local c = LocalPlayer.Character
+        local h = c and c:FindFirstChildOfClass("Humanoid")
+        if h and h.JumpPower > 0 then defaultJumpPower = math.floor(h.JumpPower + 0.5) end
+    end
+
+    local infJumpConn = UserInputService.JumpRequest:Connect(function()
+        if not infJumpEnabled then return end
+        local c = LocalPlayer.Character
+        local h = c and c:FindFirstChildOfClass("Humanoid")
+        if h then
+            pcall(function() h:ChangeState(Enum.HumanoidStateType.Jumping) end)
+        end
+    end)
+
+    local function applyJumpPower(val)
+        customJumpPower = val
+        local c = LocalPlayer.Character
+        local h = c and c:FindFirstChildOfClass("Humanoid")
+        if h then
+            pcall(function()
+                h.UseJumpPower = true
+                h.JumpPower = val
+            end)
+        end
+    end
+
+    local charJumpConn = LocalPlayer.CharacterAdded:Connect(function(newChar)
+        stopFly()
+        if customJumpPower then
+            local h = newChar:WaitForChild("Humanoid", 5)
+            if h then
+                task.wait(0.2)
+                pcall(function()
+                    h.UseJumpPower = true
+                    h.JumpPower = customJumpPower
+                end)
+            end
+        end
+    end)
+
+    -- FPS Booster / Anti-Lag (100% Reversible)
+    local fpsBoostEnabled = false
+    local fpsSnapshots = {
+        GlobalShadows = nil,
+        WaterWaveSize = nil,
+        WaterWaveSpeed = nil,
+        PartShadows = {},
+        Effects = {},
+    }
+
+    local function setFpsBooster(state)
+        fpsBoostEnabled = state
+        local terrain = workspace:FindFirstChildOfClass("Terrain")
+        if state then
+            if fpsSnapshots.GlobalShadows == nil then
+                fpsSnapshots.GlobalShadows = Lighting.GlobalShadows
+            end
+            pcall(function() Lighting.GlobalShadows = false end)
+            if terrain then
+                if fpsSnapshots.WaterWaveSize == nil then
+                    fpsSnapshots.WaterWaveSize = terrain.WaterWaveSize
+                    fpsSnapshots.WaterWaveSpeed = terrain.WaterWaveSpeed
+                end
+                pcall(function()
+                    terrain.WaterWaveSize = 0
+                    terrain.WaterWaveSpeed = 0
+                end)
+            end
+            task.spawn(function()
+                local processed = 0
+                for _, inst in ipairs(workspace:GetDescendants()) do
+                    if not fpsBoostEnabled then return end
+                    if inst:IsA("BasePart") and inst.CastShadow then
+                        fpsSnapshots.PartShadows[inst] = true
+                        pcall(function() inst.CastShadow = false end)
+                    elseif (inst:IsA("ParticleEmitter") or inst:IsA("Trail") or inst:IsA("Smoke") or inst:IsA("Fire") or inst:IsA("Sparkles"))
+                        and inst.Enabled and not string.find(inst.Name, "Kuroo", 1, true) then
+                        fpsSnapshots.Effects[inst] = true
+                        pcall(function() inst.Enabled = false end)
+                    end
+                    processed = processed + 1
+                    if processed % 400 == 0 then task.wait() end
+                end
+            end)
+        else
+            if fpsSnapshots.GlobalShadows ~= nil then
+                pcall(function() Lighting.GlobalShadows = fpsSnapshots.GlobalShadows end)
+                fpsSnapshots.GlobalShadows = nil
+            end
+            if terrain and fpsSnapshots.WaterWaveSize ~= nil then
+                pcall(function()
+                    terrain.WaterWaveSize = fpsSnapshots.WaterWaveSize
+                    terrain.WaterWaveSpeed = fpsSnapshots.WaterWaveSpeed
+                end)
+                fpsSnapshots.WaterWaveSize = nil
+                fpsSnapshots.WaterWaveSpeed = nil
+            end
+            for part in pairs(fpsSnapshots.PartShadows) do
+                if part and part.Parent then pcall(function() part.CastShadow = true end) end
+            end
+            table.clear(fpsSnapshots.PartShadows)
+            for eff in pairs(fpsSnapshots.Effects) do
+                if eff and eff.Parent then pcall(function() eff.Enabled = true end) end
+            end
+            table.clear(fpsSnapshots.Effects)
+        end
+    end
+
+    -- UI Sections di Tab Main
+    local sectionMove = tab1:AddSection({ Name = "Movement & Admin Fly" })
+    local flyToggle
+    flyToggle = sectionMove:AddToggle({
+        Name = "Admin Fly (Pose Diam)",
+        Desc = isMobile and "Terbang bebas pakai joystick (karakter diam tegak seperti Admin)" or "WASD + Space/E (Naik) + Ctrl/Q (Turun) + Shift (Boost)",
+        Default = false,
+        Callback = function(state)
+            if state then
+                if startFly() then
+                    notify("Admin Fly", "ON (Speed: " .. tostring(flySpeed) .. ")", 2)
+                end
+            else
+                stopFly()
+                notify("Admin Fly", "OFF", 2)
+            end
+        end,
+    })
+
+    sectionMove:AddSlider({
+        Name = "Fly Speed",
+        Min = 20,
+        Max = 250,
+        Default = 60,
+        Callback = function(val)
+            flySpeed = val
+        end,
+    })
+
+    sectionMove:AddToggle({
+        Name = "Noclip (Tembus Tembok)",
+        Desc = "Lewati dinding, pagar & pintu tanpa mentok",
+        Default = false,
+        Callback = function(state)
+            setNoclip(state)
+            notify("Noclip", state and "ON" or "OFF", 2)
+        end,
+    })
+
+    sectionMove:AddToggle({
+        Name = "Infinite Jump",
+        Desc = "Lompat berkali-kali di udara tanpa batas",
+        Default = false,
+        Callback = function(state)
+            infJumpEnabled = state
+            notify("Infinite Jump", state and "ON" or "OFF", 2)
+        end,
+    })
+
+    local jpSlider = sectionMove:AddSlider({
+        Name = "JumpPower",
+        Min = 50,
+        Max = 250,
+        Default = math.clamp(defaultJumpPower, 50, 250),
+        Callback = function(val)
+            applyJumpPower(val)
+        end,
+    })
+
+    sectionMove:AddButton({
+        Name = "Reset JumpPower",
+        Callback = function()
+            applyJumpPower(defaultJumpPower)
+            customJumpPower = nil
+            if jpSlider then pcall(function() jpSlider:Set(math.clamp(defaultJumpPower, 50, 250)) end) end
+            notify("JumpPower", "Dikembalikan ke default (" .. tostring(defaultJumpPower) .. ")", 2)
+        end,
+    })
+
+    local sectionPerf = tab1:AddSection({ Name = "Performance" })
+    sectionPerf:AddToggle({
+        Name = "FPS Booster / Anti-Lag",
+        Desc = "Matikan shadow & efek berat map agar lebih lancar (bisa dimatikan lagi)",
+        Default = false,
+        Callback = function(state)
+            setFpsBooster(state)
+            notify("FPS Booster", state and "Aktif! Grafik diringankan." or "Dimatikan, grafik dikembalikan.", 2)
+        end,
+    })
+
+    ExtraMain.Cleanup = function()
+        stopFly()
+        setNoclip(false)
+        infJumpEnabled = false
+        if infJumpConn then pcall(function() infJumpConn:Disconnect() end) end
+        if charJumpConn then pcall(function() charJumpConn:Disconnect() end) end
+        if fpsBoostEnabled then setFpsBooster(false) end
+        if customJumpPower then applyJumpPower(defaultJumpPower) end
+    end
+end
+
     window:OnUnload(function()
+        pcall(function()
+            if ExtraMain and ExtraMain.Cleanup then ExtraMain.Cleanup() end
+        end)
         pcall(function()
             espEnabled = false
             if espConnection then espConnection:Disconnect(); espConnection = nil end
